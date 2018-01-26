@@ -1,0 +1,26 @@
+Journal starts at block 8197, transaction 132288
+Found expected sequence 132288, type 5 (revoke table) at block 8197
+Found expected sequence 132288, type 1 (descriptor block) at block 8198
+Found expected sequence 132288, type 2 (commit block) at block 8229
+Found expected sequence 132289, type 1 (descriptor block) at block 8230
+Found expected sequence 132289, type 2 (commit block) at block 8237
+Found expected sequence 132290, type 1 (descriptor block) at block 8238
+Found expected sequence 132290, type 2 (commit block) at block 8248
+Found expected sequence 132291, type 1 (descriptor block) at block 8249
+Found expected sequence 132291, type 2 (commit block) at block 8264
+Found expected sequence 132292, type 1 (descriptor block) at block 8265
+Found expected sequence 132292, type 2 (commit block) at block 8584
+Found expected sequence 132293, type 1 (descriptor block) at block 8585
+Found expected sequence 132293, type 2 (commit block) at block 8587
+Found expected sequence 132294, type 1 (descriptor block) at block 8588
+Found expected sequence 132294, type 2 (commit block) at block 8595
+Found expected sequence 132295, type 1 (descriptor block) at block 8596
+Found expected sequence 132295, type 2 (commit block) at block 8609
+Found expected sequence 132296, type 1 (descriptor block) at block 8610
+Found expected sequence 132296, type 2 (commit block) at block 8621
+Found expected sequence 132297, type 5 (revoke table) at block 8622
+Found expected sequence 132297, type 1 (descriptor block) at block 8623
+Found expected sequence 132297, type 2 (commit block) at block 8638
+Found expected sequence 132298, type 1 (descriptor block) at block 8639
+Found expected sequence 132298, type 2 (commit block) at block 8646
+Found sequence 131531 (not 132299) at block 8647: end of journal.
