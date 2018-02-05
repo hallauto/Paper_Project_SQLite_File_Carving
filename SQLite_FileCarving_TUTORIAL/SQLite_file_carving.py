@@ -10,6 +10,7 @@ class FileConnector:
     """
     def __init__(self, FileName):
         srcName = FileName
+        self.parser = ''
         if FileName.contain(".journal"):
             self.file_type = 'journal'
             self.fileConnector = JournalParsing.FileConnector(FileName)
@@ -19,9 +20,14 @@ class FileConnector:
             self.file_type = 'image'
 
         try:
-            file = open(FileName)
+            self.file = open(FileName)
         except IOError as error:
             print("파일이 존재하지않습니다.")
         except Exception as error:
             print("An exception happened: " + str(error))
 
+
+class SQLiteCarvingByJournal:
+
+    def __init__(self, journal_file_name, image_file):
+        image_connector = FileConnector(image_file)
