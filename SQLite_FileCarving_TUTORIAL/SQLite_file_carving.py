@@ -11,12 +11,11 @@ class FileConnector:
     def __init__(self, FileName):
         srcName = FileName
         self.parser = ''
-        if FileName.contain(".journal"):
+        if FileName.find(".journal") or FileName.find("logdump"):
             self.file_type = 'journal'
-            self.fileConnector = JournalParsing.FileConnector(FileName)
-        elif FileName.contain(".dd"):
+        elif FileName.find(".dd"):
             self.file_type = 'dd'
-        elif FileName.contain(".image"):
+        elif FileName.find(".image"):
             self.file_type = 'image'
 
         try:
@@ -28,6 +27,19 @@ class FileConnector:
 
 
 class SQLiteCarvingByJournal:
-
+    """ 전체 워크 플로우를 담당하는 클래스입니다. 이 클래스가 각각의 다른 클래스를 멤버 변수로서 관리합니다.
+        해당 저널 파일과 이미지 파일을 각각의 FileConnector 오브젝트로 관리합니다.
+    """
     def __init__(self, journal_file_name, image_file):
-        image_connector = FileConnector(image_file)
+        self.image_connector = FileConnector(image_file)
+        self.journal_connector = FileConnector(journal_file_name)
+        self.journal_parser = JournalParsing.JournalParser()
+
+    def parse_whole_file(self):
+        self.journal_parser.parse_whole_file(self.journal_connector.file)
+
+
+
+test = SQLiteCarvingByJournal("logdump1.txt","")
+test.parse_whole_file()
+

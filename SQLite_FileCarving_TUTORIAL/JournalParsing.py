@@ -50,3 +50,16 @@ class JournalParser:
         self.journal_type_name = JournalTypeEnum(int(self.journal_type)).name
 
         print('저널 {0}번은 {1} 타입의 {2}번 블록을 가리킵니다.'.format(self.journal_sequence, self.journal_type_name, parser_result[2]))
+
+    def parse_whole_file(self, journal_file):
+        try:
+            for one_line_text in journal_file.readlines():
+                self.parse_one_line(one_line_text)
+        except RuntimeError as error:
+            print(error)
+
+    def parse_whole_text(self, journal_texts):
+        for one_line_text in journal_texts:
+            self.parse_one_line(one_line_text)
+
+
