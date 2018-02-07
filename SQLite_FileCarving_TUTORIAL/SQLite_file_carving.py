@@ -38,6 +38,16 @@ class SQLiteCarvingByJournal:
     def parse_whole_file(self):
         self.journal_parser.parse_whole_file(self.journal_connector.file)
 
+    def parse_whole_text(self):
+        self.journal_parser.parse_whole_text(self.journal_connector.file.readlines())
+
+    def parse_one_line(self):
+        try:
+            self.journal_parser.parse_one_line(self.journal_connector.file.readline())
+        except IOError:
+            print("저널 읽기 중 에러 발생")
+
+
 
 
 test = SQLiteCarvingByJournal("logdump1.txt","")
