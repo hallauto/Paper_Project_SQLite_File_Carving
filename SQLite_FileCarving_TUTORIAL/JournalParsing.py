@@ -17,6 +17,7 @@ class JournalParser:
         self.journal_sequence = 0
         self.journal_type = 0
         self.journal_type_name = ""
+        self.journal_results = []
 
     def parse_journal_head(self, input_text):
         original_text = input_text
@@ -48,8 +49,9 @@ class JournalParser:
         self.journal_sequence = parser_result[0]
         self.journal_type = parser_result[1]
         self.journal_type_name = JournalTypeEnum(int(self.journal_type)).name
+        self.journal_results.append(parser_result[2])
 
-        print('저널 {0}번은 {1} 타입의 {2}번 블록을 가리킵니다.'.format(self.journal_sequence, self.journal_type_name, parser_result[2]))
+        print('저널 {0}번은 {1} 타입의 {2}번 블록을 가리킵니다.'.format(self.journal_sequence, self.journal_type_name, self.journal_results[self.journal_results.__len__() - 1]))
 
     def parse_whole_file(self, journal_file):
         try:
