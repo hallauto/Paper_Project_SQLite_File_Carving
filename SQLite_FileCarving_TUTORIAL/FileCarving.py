@@ -48,3 +48,11 @@ class FileCarving:
         :return:
         """
         return
+
+    def read_block(self, block_text):
+        """
+        블록을 읽고 SQLite Header가 있는지 검사합니다.
+        :param block_text: 파악해야할 블록 텍스트입니다.
+        :return:
+        """
+

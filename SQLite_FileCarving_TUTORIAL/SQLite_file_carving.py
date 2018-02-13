@@ -25,6 +25,9 @@ class FileConnector:
         except Exception as error:
             print("An exception happened: " + str(error))
 
+    def reset_file_read(self):
+        self.file.seek(0,)
+
 
 class SQLiteCarvingByJournal:
     """ 전체 워크 플로우를 담당하는 클래스입니다. 이 클래스가 각각의 다른 클래스를 멤버 변수로서 관리합니다.
@@ -37,6 +40,16 @@ class SQLiteCarvingByJournal:
 
     def parse_whole_file(self):
         self.journal_parser.parse_whole_file(self.journal_connector.file)
+
+    def parse_whole_text(self):
+        self.journal_parser.parse_whole_text(self.journal_connector.file.readlines())
+
+    def parse_one_line(self):
+        try:
+            self.journal_parser.parse_one_line(self.journal_connector.file.readline())
+        except IOError:
+            print("저널 읽기 중 에러 발생")
+
 
 
 
