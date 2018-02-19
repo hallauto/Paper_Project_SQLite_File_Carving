@@ -27,7 +27,13 @@ class FileConnector:
     def reset_file_read(self):
         self.file.seek(0)
 
-    def change_block_file_read(self, block_number):
+    def temp_file_read(self, read_size):
+        original_location = self.file.tell()
+        read_data = self.file.read(read_size)
+        self.file.seek(original_location, 0)
+        return read_data
+
+    def block_file_read(self, block_number):
         try:
             self.file.seek(block_number * self.block_size,0)
             if self.file.readable() is False:

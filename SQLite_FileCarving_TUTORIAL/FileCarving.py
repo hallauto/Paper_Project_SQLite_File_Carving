@@ -10,7 +10,9 @@ class FileCarving:
         self.destdir = destdir
         self.fileConnector = fileConnector
         self.file_number = 0
-        self.block_number = 0
+        self.head_offsets = [] #카빙해야할 파일들의 head가 시작되는 offset입니다.
+        self.page_sizes = [] #카빙해야할 SQLite 파일들의 page size 입니다.
+        self.file_type = [] #카빙해야할 SQLite 파일 타입을 알려주는 값입니다.
         self.journaled_block_numbers = [] #ExT4 Journal을 파싱해서 확인한 저널링 된 블록들입니다. 이들을 먼저 분석합니다.
         self.max_block_number = 0 #현재 분석중인 이미지 파일의 최대 블록 번호입니다.
         self.current_block_number = 0 #현재 분석중인 블록 번호입니다.
@@ -49,14 +51,56 @@ class FileCarving:
 
         return
 
-    def read_block(self, block_location = -1):
+    def carving_block(self, block_location = -1):
         """
-        블록을 읽고 SQLite Header가 있는지 검사합니다.
+        블록을 읽고 SQLite Header가 있는지 검사한 후에 검사 결과에 따라 카빙을 처리합니다. 모든 블록을 검사할때 까지 카빙은 멈추지 않습니다.
         :param block_text: 파악해야할 블록 텍스트입니다. default 값을 입력하면 current_block_number로 바뀝니다.
         :return:
         """
         if block_location is -1:
             block_location = self.current_block_number
 
-        self.fileConnector.read
+        self.current_block_number = block_location
+
+        block_data = self.fileConnector.block_file_read(block_location)
+        if self.check_file_structure(block_data):
+            self.investigate_block_numbers.remove(block_location)
+            if self.investigate_block_numbers.__len__() < 1:
+                for head_offset in self.head_offsets:
+
+
+
+
+
+
+
+    def check_file_structure(self, block_data):
+        head_offset = block_data.find(FileCarving.SQLite_HEADER_STRING.encode('utf-8'))
+        if head_offset is -1:
+            return False
+
+        print(str(hex(self.fileConnector.file.tell())) + "헤더 오프셋이 있습니다. 즉, 이 블록에 SQLite 파일이 존재합니다.")
+        self.fileConnector.file.seek(-1 * (self.fileConnector.block_size - head_offset), 1) #헤더 오프셋이 유효한지 파악하기위해 헤더 오프셋으로 이동합니다.
+        check_data = self.fileConnector.temp_file_read(self.fileConnector.block_size) #헤더 오프셋에서 블록 사이즈 만큼 읽습니다. 유효한 데이터가 존재하는지 파악하기 위함입니다.
+
+        print("check_data[21] = " + str(check_data[21]))
+        if (check_data[21] != 64 and check_data[22] != 32 and check_data[23] != 32): #추가로 시그니처 정보를 파악합니다.
+            print(str(hex(self.fileConnector.file.tell() - 512)) + "...그러나 파일은 없네요.")
+            return False
+
+        page_size = (check_data[16] * 256 + check_data[17])
+        print("page size = " + str(page_size))
+        if (page_size <= -1):
+            return False
+
+        #드디어 파일을 찾았습니다. 해당 파일의 Offset을 정리해서 변수에 저장합니다!
+        self.head_offsets.append(head_offset + self.fileConnector.file.tell() - self.fileConnector.block_size) #head_offset은 블록 읽기에서 발견한 head 위치 + 현재까지 읽은 파일 위치 - 현재 작업중인 블록의 크기 입니다.
+        self.page_sizes.append(page_size)
+
+        return True
+
+
+
+
+
 
