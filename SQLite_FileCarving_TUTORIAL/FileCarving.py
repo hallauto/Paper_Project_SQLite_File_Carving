@@ -9,7 +9,7 @@ class FileCarving:
         """
         self.destdir = destdir
         self.fileConnector = fileConnector
-        self.file_number = 0
+        self.file_many = 0
         self.head_offsets = [] #카빙해야할 파일들의 head가 시작되는 offset입니다.
         self.page_sizes = [] #카빙해야할 SQLite 파일들의 page size 입니다.
         self.file_type = [] #카빙해야할 SQLite 파일 타입을 알려주는 값입니다.
@@ -66,8 +66,21 @@ class FileCarving:
         if self.check_file_structure(block_data):
             self.investigate_block_numbers.remove(block_location)
             if self.investigate_block_numbers.__len__() < 1:
-                for head_offset in self.head_offsets:
-
+                while self.file_many > 0:
+                    self.fileConnector.file.seek(self.head_offsets[self.file_many -1], 0)
+                    sql_db_file_data = self.fileConnector.file.read(self.page_sizes[self.file_many -1]) #먼저 헤더 부분과 첫번째 페이지를 읽습니다. 이후에 추가 페이지가 존재하는지 검사해야합니다.
+                    #추가 페이지들은 트리구조로 이어집니다. 따라서, 이들 페이지만의 페이지 헤더가 존재하면 파일이 이어진다고 볼 수 있습니다.
+                    leap_page_data = "start" #첫 루프가 무조건 실행되기위한 임시 값입니다.
+                    while (len(leap_page_data) > 1):
+                        leap_page_data = self.fileConnector.file.read(self.page_sizes[self.file_many -1])
+                        if ((leap_page_data[0] != '\x00') and (leap_page_data[0] != '\x0D') and (leap_page_data[0] != '\x0A') and (
+                                leap_page_data[0] != '\x05') and (
+                                leap_page_data[0] != '\x02')):
+                            break
+                        if ((ord(leap_page_data[1]) * 256 + ord(leap_page_data[2]) > self.page_sizes[self.file_many-1]) or (
+                                ord(leap_page_data[5]) * 256 + ord(leap_page_data[6]) > self.page_sizes[self.file_many-1])):
+                            break
+                        sql_db_file_data += leap_page_data
 
 
 
@@ -96,6 +109,7 @@ class FileCarving:
         #드디어 파일을 찾았습니다. 해당 파일의 Offset을 정리해서 변수에 저장합니다!
         self.head_offsets.append(head_offset + self.fileConnector.file.tell() - self.fileConnector.block_size) #head_offset은 블록 읽기에서 발견한 head 위치 + 현재까지 읽은 파일 위치 - 현재 작업중인 블록의 크기 입니다.
         self.page_sizes.append(page_size)
+        self.file_many+=1
 
         return True
 
