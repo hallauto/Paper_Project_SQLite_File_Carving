@@ -57,7 +57,7 @@ class FileCarving:
         :param block_text: 파악해야할 블록 텍스트입니다. default 값을 입력하면 current_block_number로 바뀝니다.
         :return:
         """
-        if block_location is -1:
+        if block_location == -1:
             block_location = self.current_block_number
 
         self.current_block_number = block_location
@@ -89,7 +89,7 @@ class FileCarving:
 
     def check_file_structure(self, block_data):
         head_offset = block_data.find(FileCarving.SQLite_HEADER_STRING.encode('utf-8'))
-        if head_offset is -1:
+        if head_offset == -1:
             return False
 
         print(str(hex(self.fileConnector.file.tell())) + "헤더 오프셋이 있습니다. 즉, 이 블록에 SQLite 파일이 존재합니다.")

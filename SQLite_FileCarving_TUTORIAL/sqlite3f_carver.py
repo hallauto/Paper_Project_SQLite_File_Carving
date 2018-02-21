@@ -19,7 +19,7 @@ while (len(rblock) > 1):
 
     if (header_offset <= -1):
         continue
-    print(str(hex(rf.tell())) + "헤더 오프셋이 있습니다. 즉, 이 블록에 SQLite 파일이 존재합니다.")
+    print(str(hex(rf.tell())) + " 헤더 오프셋이 있습니다. 즉, 이 블록에 SQLite 파일이 존재합니다.")
     rf.seek(-1 * (512 - header_offset), 1)
     rblock = rf.read(512)
 
@@ -34,7 +34,7 @@ while (len(rblock) > 1):
         continue
     rblock = rblock + rf.read(psize - 512)
 
-    filename = "carved_" + str(rf.tell()) + ".sqlite3"
+    filename = "carved_" + str(rf.tell()) + ".db"
     wfname = os.path.join(destdir, filename)
     print("write file : " + wfname)
     wf = open(wfname, 'wb')

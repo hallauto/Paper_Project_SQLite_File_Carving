@@ -5,20 +5,33 @@ class FileConnector:
         특히 전체 디스크 이미지를 분석하는 경우 같은 특이 사항을 대비한 코드가 필요합니다.
         해당 사항을 적용해야합니다.
     """
-    def __init__(self, FileName, block_size = 0):
-        srcName = FileName
+    def __init__(self, file_name, block_size = 0):
         self.parser = ''
-        if FileName.find(".journal") or FileName.find("logdump"):
+        if file_name.find(".journal") or file_name.find("logdump"):
             self.file_type = 'journal'
-        elif FileName.find(".dd"):
+            self.src_name = file_name
+        elif file_name.find(".dd"):
             self.file_type = 'dd'
             self.block_size = block_size
-        elif FileName.find(".image"):
+            self.src_name = file_name
+        elif file_name.find(".image"):
             self.file_type = 'image'
             self.block_size = block_size
+            self.src_name = file_name
+        elif file_name.find(".db"):
+            self.file_type = 'db'
+            self.dest_name = file_name
+        elif file_name.find(".db-journal"):
+            self.file_type = 'db-journal'
+            self.dest_name = file_name
 
         try:
-            self.file = open(FileName)
+            if self.file_type == '.journal':
+                self.file = open(file_name)
+            elif self.file_type == 'dd' or self.file_type == 'image':
+                self.file = open(file_name, 'rb')
+            elif self.file_type == 'db' or self.file_type == 'db-journal':
+                self.file = open(file_name, 'w')
         except IOError as error:
             print("파일이 존재하지않습니다.")
         except Exception as error:

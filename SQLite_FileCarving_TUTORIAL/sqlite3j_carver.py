@@ -1,4 +1,6 @@
-import sys, os
+import sys
+import os
+import struct
 
 if len(sys.argv) != 3:
     print(
@@ -10,42 +12,63 @@ destdir = sys.argv[2]
 
 rf = open(srcfile, 'rb')
 rblock = 'start'
-sql3_j_header = 'd9d505f920a163d7'.encode('hex')
+sql3_j_header = b'\xd9\xd5\x05\xf9 \xa1c\xd7'
 
 filecnt = 0
 while (len(rblock) > 1):
     rblock = rf.read(512)
-    header_offset = rblock.find(sql3_j_header.encode('UTF-8'))
+    header_offset = rblock.find(sql3_j_header)
 
     if (header_offset <= -1):
         continue
-    print(str(hex(rf.tell())) + "헤더 오프셋이 있습니다. 즉, 이 블록에 SQLite 파일이 존재합니다.")
+    print(str(hex(rf.tell())) + " 헤더 오프셋이 있습니다. 즉, 이 블록에 SQLite 저널 파일이 존재합니다.")
     rf.seek(-1 * (512 - header_offset), 1)
     rblock = rf.read(512)
 
-    print("rblcok[21] = " + str(rblock[21]))
-    if (rblock[21] != 64 and rblock[22] != 32 and rblock[23] != 32):
-        print(str(hex(rf.tell() - 512)) + "...그러나 파일은 없네요.")
+    try:
+        page_count = struct.unpack('L', bytearray(rblock[8:12]))[0]
+        print("rblcok[8] : The number of pages in the next segment of the journal = " + str(page_count))
+        checksum = struct.unpack('L',bytearray(rblock[12:16]))[0]
+        print("rblcok[12] : A random nonce for the checksum = " + str(checksum))
+        initial_db_size = struct.unpack('L',bytearray(rblock[16:20]))[0]
+        print("rblcok[16] : Initial size of the database in pages = " + str(initial_db_size))
+        sector_size = struct.unpack('L',bytearray(rblock[20:24]))[0]
+        print("rblcok[20] : Size of a disk sector assumed by the process that wrote this journal = " + str(sector_size))
+        page_size = struct.unpack('L',bytearray(rblock[24:28]))[0]
+        print("rblcok[24] : Size of pages in this journal = " + str(page_size))
+
+    except ValueError:
         continue
 
-    psize = (rblock[16] * 256 + rblock[17])
-    print("psize = " + str(psize))
-    if (psize <= -1):
+    if initial_db_size <= 0:
+        print("error : initial_page_size = [0]".format(initial_db_size),)
         continue
-    rblock = rblock + rf.read(psize - 512)
+    if sector_size <= 0:
+        print("error : sector_size = [0]".format(sector_size),)
+        continue
+    if page_size <= 0:
+        print("error : page_size = [0]".format(page_size),)
+        continue
 
-    filename = "carved_" + str(rf.tell()) + ".sqlite3"
+    #SQLite 저널파일은 헤더 이후에는 섹터 크기만큼의 빈 자리를 둡니다. 이유는 섹터 단위로 쓰기가 이루어지는중, 이후의 데이터가 오류나 실패로 변질되는 것을 막기 위함입니다.
+    rf.seek(-1 * (512 - header_offset), 1)
+    rblock = rf.read(sector_size)
+
+    filename = "carved_" + str(rf.tell()) + ".db-journal"
     wfname = os.path.join(destdir, filename)
     print("write file : " + wfname)
     wf = open(wfname, 'wb')
     wf.write(rblock)
 
-    while (len(rblock) > 1):
-        rblock = rf.read(psize)
-        if ((rblock[0] != '\x00') and (rblock[0] != '\x0D') and (rblock[0] != '\x0A') and (rblock[0] != '\x05') and (
-                rblock[0] != '\x02')):
-            break
-        if ((ord(rblock[1]) * 256 + ord(rblock[2]) > psize) or (ord(rblock[5]) * 256 + ord(rblock[6]) > psize)):
+    while (len(rblock) > 3):
+        rblock = rf.read(page_size)
+        #페이지 번호가 -1 이하일 수는 없습니다.
+        try:
+            if struct.unpack('L',bytearray(rblock[0:4]))[0] <= -1:
+                break
+            if struct.unpack('L',bytearray(rblock[4:8]))[0] <= -1:
+                break
+        except ValueError:
             break
         wf.write(rblock)
     wf.close()
