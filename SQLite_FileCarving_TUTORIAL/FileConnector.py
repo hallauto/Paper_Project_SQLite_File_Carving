@@ -7,6 +7,7 @@ class FileConnector:
     """
     def __init__(self, file_name, block_size = 0):
         self.parser = ''
+        self.mem_point = -1
         if file_name.find(".journal") or file_name.find("logdump"):
             self.file_type = 'journal'
             self.src_name = file_name
@@ -45,6 +46,15 @@ class FileConnector:
         read_data = self.file.read(read_size)
         self.file.seek(original_location, 0)
         return read_data
+
+    def save_original_seek(self):
+        self.mem_point = self.file.tell()
+
+    def load_original_seek(self):
+        if self.mem_point == -1:
+            return
+        self.file.seek(self.mem_point,0)
+        self.mem_point = -1
 
     def block_file_read(self, block_number):
         try:

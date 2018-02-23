@@ -1,4 +1,4 @@
-import sys
+﻿import sys
 import os
 import struct
 
@@ -62,11 +62,9 @@ while (len(rblock) > 1):
 
     while (len(rblock) > 3):
         rblock = rf.read(page_size)
-        #페이지 번호가 -1 이하일 수는 없습니다.
+        #페이지 번호가 0 이하일 수는 없습니다.
         try:
-            if struct.unpack('L',bytearray(rblock[0:4]))[0] <= -1:
-                break
-            if struct.unpack('L',bytearray(rblock[4:8]))[0] <= -1:
+            if struct.unpack('L',bytearray(rblock[0:4]))[0] <= 0:
                 break
         except ValueError:
             break
