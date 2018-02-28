@@ -38,7 +38,7 @@ class FileConnector:
         except Exception as error:
             print("An exception happened: " + str(error))
 
-    def reset_file_read(self):
+    def reset_file_point(self):
         self.file.seek(0)
 
     def temp_file_read(self, read_size):

@@ -112,7 +112,15 @@ class FileCarving:
                 return False
             sql_file_data == self.fileConnector.file.read(self.sector_sizes[index] + self.page_sizes[index])
             journal_page_data = 'start'
-            while(len(journal_page_data))
+            while (len(journal_page_data) > 3):
+                journal_page_data = self.fileConnector.file.read(self.page_sizes[index])
+                # 페이지 번호가 0 이하일 수는 없습니다.
+                try:
+                    if struct.unpack('L', bytearray(journal_page_data[0:4]))[0] <= 0:
+                        break
+                except ValueError:
+                    break
+                sql_file_data += journal_page_data
 
 
 
@@ -177,6 +185,13 @@ class FileCarving:
         if page_size <= 0:
             print("error : page_size = [0]".format(page_size), )
             return False
+
+        # 드디어 파일을 찾았습니다. 해당 파일의 Offset을 정리해서 변수에 저장합니다!
+        self.head_offsets.append(head_offset + self.fileConnector.file.tell() - self.fileConnector.block_size)  # head_offset은 블록 읽기에서 발견한 head 위치 + 현재까지 읽은 파일 위치 - 현재 작업중인 블록의 크기 입니다.
+        self.page_sizes.append(page_size)
+        self.file_type.append(self.SQLite_DB)
+        self.sector_sizes.append(-1)
+        self.file_many += 1
 
 
 
