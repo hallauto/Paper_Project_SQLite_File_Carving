@@ -20,42 +20,10 @@ class FileCarving:
         self.sector_sizes = [] #카빙해야할 SQLite 저널 파일들이 알려주는 sector size 입니다. 저널파일은 이 크기만큼 헤더가 존재하고 그 이후에 페이지가 시작됩니다. db 파일은 해당 사이즈를 이용하지 않으며, 따라서 -1로 값을 넣습니다.
         self.file_type = [] #카빙해야할 SQLite 파일 타입을 알려주는 값입니다.
         self.journaled_block_numbers = [] #ExT4 Journal을 파싱해서 확인한 저널링 된 블록들입니다. 이들을 먼저 분석합니다.
-        self.max_block_number = 0 #현재 분석중인 이미지 파일의 최대 블록 번호입니다.
+        self.max_block_number = self.fileConnector.file_size/self.fileConnector.block_size #현재 분석중인 이미지 파일의 최대 블록 번호입니다.
         self.current_block_number = 0 #현재 분석중인 블록 번호입니다.
-        self.investigate_block_numbers = [] #분석해야할 블록 번호입니다. journaled_block_numbers 들이 먼저 분석되므로, 해당 번호의 블록들은 이 목록에서 이후에 삭제됩니다.
+        self.investigate_block_numbers = list[range(0,self.max_block_number)] #분석해야할 블록 번호입니다. journaled_block_numbers 들이 먼저 분석되므로, 해당 번호의 블록들은 이 목록에서 이후에 삭제됩니다.
 
-
-    def set_open_file(self, image_file_dir):
-        """
-        파일 경로를 받고 해당 파일을 읽습니다. 이 함수는 파일 카빙만을 할 때 사용하는 함수입니다.
-        :param image_file_dir: 파일 카빙을 진행할 이미지 파일입니다.
-        :return:
-        """
-        try:
-            self.image_file = open(image_file_dir)
-        except FileNotFoundError:
-            print('해당 파일이 없습니다.')
-
-    def set_opened_file(self, image_file):
-        """
-        열린 file 변수를 전달 받습니다. 해당 변수는 FileConnector에 존재합니다.
-        :param image_file: FileConnector에 존재하는 파일 변수를 전달받으면 됩니다.
-        :return:
-        """
-        self.image_file = image_file
-        if not self.image_file.readable():
-            print('FileConnecotr에서 전달받은 file 변수가 정상적이지 않습니다.')
-            self.image_file = None
-            return
-
-    def carving_whole_file(self):
-        """
-        현재 지정된 이미지 파일을 카빙합니다. 해당 카빙 결과는 지정된 디렉토리에 저장됩니다.
-        :return:
-        """
-
-
-        return
 
     def carving_block(self, block_location = -1):
         """
@@ -69,16 +37,28 @@ class FileCarving:
         self.current_block_number = block_location
 
         block_data = self.fileConnector.block_file_read(block_location)  #검사할 블록을 읽습니다.
+        self.investigate_block_numbers.remove(block_location)
         if self.check_db_file_structure(block_data) or self.check_journal_file_structure():
-            self.investigate_block_numbers.remove(block_location)
-            if self.investigate_block_numbers.__len__() < 1: #모든 블록을 검사했다면 모든 파일들의 카빙을 시작합니다.
-                while self.file_many > 0:
+            return True
+        return False
                     
-                    
+    def carving_whole_file(self):
+        """
+        현재 지정된 이미지 파일 전체를 카빙합니다. 해당 카빙 결과는 지정된 디렉토리에 저장됩니다.
+        :return:
+        """
+        for self.current_block_number in self.investigate_block_numbers:
+            self.carving_block(self.current_block_number)
+
+
+
+
+
+        return
 
     def make_file(self, index):
         """
-        지시된 인덱스에 저장된 오프셋, 사이즈에 따라 파일을 카빙합니다.
+        지시된 인덱스에 저장된 오프셋, 사이즈에 따라 파일을 카빙합니다. 카빙된 부분도 분석할 블록 목록에서 제거해야합니다.
         :param index: page_sizes,head_offsets 등에 접근할 때 쓸 색인입니다.
         :return:
         """
@@ -88,13 +68,15 @@ class FileCarving:
         if len(self.page_sizes) != len(self.head_offsets):
             return False
 
+        page_per_block = abs(self.page_sizes[index]/self.fileConnector.block_size)
+
         self.fileConnector.file.seek(self.index, 0)
         #먼저 저널 파일을 카빙하는지, DB 파일을 카빙하는지 검사합니다.
         if self.file_type == self.SQLite_DB:
             sql_file_data = self.fileConnector.file.read(self.page_sizes[index])  # 먼저 헤더 부분과 첫번째 페이지를 읽습니다. 이후에 추가 페이지가 존재하는지 검사해야합니다.
             # 추가 페이지들은 트리구조로 이어집니다. 따라서, 이들 페이지만의 페이지 헤더가 존재하면 파일이 이어진다고 볼 수 있습니다.
             leap_page_data = "start"  # 첫 루프가 무조건 실행되기위한 임시 값입니다.
-            while (len(leap_page_data) > 1):
+            while len(leap_page_data) > 1:
                 leap_page_data = self.fileConnector.file.read(self.page_sizes[index])
                 if ((leap_page_data[0] != '\x00') and (leap_page_data[0] != '\x0D') and (
                         leap_page_data[0] != '\x0A') and (
@@ -190,7 +172,7 @@ class FileCarving:
         self.head_offsets.append(head_offset + self.fileConnector.file.tell() - self.fileConnector.block_size)  # head_offset은 블록 읽기에서 발견한 head 위치 + 현재까지 읽은 파일 위치 - 현재 작업중인 블록의 크기 입니다.
         self.page_sizes.append(page_size)
         self.file_type.append(self.SQLite_DB)
-        self.sector_sizes.append(-1)
+        self.sector_sizes.append(sector_size)
         self.file_many += 1
 
 
