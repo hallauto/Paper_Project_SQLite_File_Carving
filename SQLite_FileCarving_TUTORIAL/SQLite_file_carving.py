@@ -5,11 +5,11 @@
 import JournalParsing, FileConnector
 
 
-
 class SQLiteCarvingByJournal:
     """ 전체 워크 플로우를 담당하는 클래스입니다. 이 클래스가 각각의 다른 클래스를 멤버 변수로서 관리합니다.
         해당 저널 파일과 이미지 파일을 각각의 FileConnector 오브젝트로 관리합니다.
     """
+
     def __init__(self, journal_file_name, image_file):
         self.image_connector = FileConnector(image_file)
         self.journal_connector = FileConnector(journal_file_name)
@@ -28,9 +28,5 @@ class SQLiteCarvingByJournal:
             print("저널 읽기 중 에러 발생")
 
 
-
-
-test = SQLiteCarvingByJournal("logdump1.txt","")
+test = SQLiteCarvingByJournal("logdump1.txt", "")
 test.parse_whole_file()
-
-

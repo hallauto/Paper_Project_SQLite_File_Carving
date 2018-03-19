@@ -5,9 +5,17 @@ class FileConnector:
         특히 전체 디스크 이미지를 분석하는 경우 같은 특이 사항을 대비한 코드가 필요합니다.
         해당 사항을 적용해야합니다.
     """
-    def __init__(self, file_name, block_size = 4096):
+    def __init__(self, file_name, block_size=4096):
         self.parser = ''
         self.mem_point = -1
+        self.file_type = ""
+        self.file_size = -1
+        self.block_size = -1
+        self.dest_name = -1
+        self.src_name = -1
+        self.file_open(file_name, block_size)
+
+    def file_open(self, file_name, block_size=4096):
         if file_name.find(".journal") or file_name.find("logdump"):
             self.file_type = 'journal'
             self.src_name = file_name
