@@ -25,14 +25,12 @@ class FileCarving:
         self.current_block_number = 0  # 현재 분석중인 블록 번호입니다.
         self.investigate_block_numbers = list[range(0,self.max_block_number)]  # 분석해야할 블록 번호입니다. journaled_block_numbers 들이 먼저 분석되므로, 해당 번호의 블록들은 이 목록에서 이후에 삭제됩니다.
 
-    def carving_block(self, block_location=-1):
+    def carving_block(self, block_location):
         """
         블록을 읽고 SQLite Header가 있는지 검사한 후에 검사 결과에 따라 카빙을 처리합니다. 모든 블록을 검사할때 까지 카빙은 멈추지 않습니다.
         :param block_text: 파악해야할 블록 텍스트입니다. default 값을 입력하면 current_block_number로 바뀝니다.
         :return:
         """
-        if block_location == -1:
-            block_location = self.current_block_number
 
         self.current_block_number = block_location
 
@@ -113,7 +111,7 @@ class FileCarving:
         if head_offset == -1:
             return False
 
-        print(str(hex(self.fileConnector.file.tell())) + "헤더 오프셋이 있습니다. 즉, 이 블록에 SQLite 파일이 존재합니다.")
+        print(str(hex(self.fileConnector.file.tell())) + "헤더 오프셋 {0}이 있습니다. 즉, 이 블록에 SQLite DB파일이 존재합니다.".format(head_offset))
         # 헤더 오프셋이 유효한지 파악하기위해 헤더 오프셋으로 이동합니다.
         self.fileConnector.file.seek(-1 * (self.fileConnector.block_size - head_offset),1)
         # 헤더 오프셋에서 블록 사이즈 만큼 읽습니다. 유효한 데이터가 존재하는지 파악하기 위함입니다.
@@ -144,11 +142,11 @@ class FileCarving:
         if head_offset == -1:
             return False
 
-        print(str(hex(self.fileConnector.file.tell())) + "헤더 오프셋이 있습니다. 즉, 이 블록에 SQLite 저널 파일이 존재합니다.")
-        self.fileConnector.file.seek(-1 * (self.fileConnector.block_size - head_offset),
-                                     1)  # 헤더 오프셋이 유효한지 파악하기위해 헤더 오프셋으로 이동합니다.
-        check_data = self.fileConnector.temp_file_read(
-            self.fileConnector.block_size)  # 헤더 오프셋에서 블록 사이즈 만큼 읽습니다. 유효한 데이터가 존재하는지 파악하기 위함입니다.
+        print(str(hex(self.fileConnector.file.tell())) + "헤더 오프셋 {0}이 있습니다. 즉, 이 블록에 SQLite 저널 파일이 존재합니다.".format(head_offset))
+        # 헤더 오프셋이 유효한지 파악하기위해 헤더 오프셋으로 이동합니다.
+        self.fileConnector.file.seek(-1 * (self.fileConnector.block_size - head_offset), 1)
+        # 헤더 오프셋에서 블록 사이즈 만큼 읽습니다. 유효한 데이터가 존재하는지 파악하기 위함입니다.
+        check_data = self.fileConnector.temp_file_read(self.fileConnector.block_size)
         try:
             page_count = struct.unpack('L', bytearray(check_data[8:12]))[0]
             print("rblcok[8] : The number of pages in the next segment of the journal = " + str(page_count))

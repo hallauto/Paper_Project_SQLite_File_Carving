@@ -21,7 +21,7 @@ while (len(rblock) > 1):
 
     if (header_offset <= -1):
         continue
-    print(str(hex(rf.tell())) + " 헤더 오프셋이 있습니다. 즉, 이 블록에 SQLite 저널 파일이 존재합니다.")
+    print(str(hex(rf.tell())) + " 헤더 오프셋 {0}이 있습니다. 즉, 이 블록에 SQLite 저널 파일이 존재합니다.".format(header_offset))
     rf.seek(-1 * (512 - header_offset), 1)
     rblock = rf.read(512)
 
@@ -51,7 +51,7 @@ while (len(rblock) > 1):
         continue
 
     #SQLite 저널파일은 헤더 이후에는 섹터 크기만큼의 빈 자리를 둡니다. 이유는 섹터 단위로 쓰기가 이루어지는중, 이후의 데이터가 오류나 실패로 변질되는 것을 막기 위함입니다.
-    rf.seek(-1 * (512 - header_offset), 1)
+    rf.seek(-1 * 512, 1)
     rblock = rf.read(sector_size)
 
     filename = "carved_" + str(rf.tell()) + ".db-journal"
