@@ -1,4 +1,4 @@
-import sys, os
+import sys, os, binascii
 
 if len(sys.argv) != 3:
     print('SQLite3 Continuous Files carver\t\tmade by @ykx100\n\tUsage : sqlite3f_carver.py [sourcefile] [destdir]\n\tExample : python sqlite3f_carver.py dumped.dat ./carved')
@@ -21,6 +21,8 @@ while (len(rblock) > 1):
     print(str(hex(rf.tell())) + " 헤더 오프셋 {0}이 있습니다. 즉, 이 블록에 SQLite DB파일이 존재합니다.".format(header_offset))
     rf.seek(-1 * (512 - header_offset), 1)
     rblock = rf.read(512)
+
+    print("SQLite Version = {0}".format(binascii.hexlify(rblock[96:100])))
 
     print("rblcok[21] = " + str(rblock[21]))
     if (rblock[21] != 64 and rblock[22] != 32 and rblock[23] != 32):

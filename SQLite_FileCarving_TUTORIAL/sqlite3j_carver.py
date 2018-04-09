@@ -1,6 +1,6 @@
 ﻿import sys
 import os
-import struct
+import binascii
 
 if len(sys.argv) != 3:
     print(
@@ -26,15 +26,15 @@ while (len(rblock) > 1):
     rblock = rf.read(512)
 
     try:
-        page_count = struct.unpack('L', bytearray(rblock[8:12]))[0]
+        page_count = int(binascii.hexlify(rblock[8:12]), 16)
         print("rblcok[8] : The number of pages in the next segment of the journal = " + str(page_count))
-        checksum = struct.unpack('L',bytearray(rblock[12:16]))[0]
+        checksum = int(binascii.hexlify(rblock[12:16]), 16)
         print("rblcok[12] : A random nonce for the checksum = " + str(checksum))
-        initial_db_size = struct.unpack('L',bytearray(rblock[16:20]))[0]
+        initial_db_size = int(binascii.hexlify(rblock[16:20]),16)
         print("rblcok[16] : Initial size of the database in pages = " + str(initial_db_size))
-        sector_size = struct.unpack('L',bytearray(rblock[20:24]))[0]
+        sector_size = int(binascii.hexlify(rblock[20:24]),16)
         print("rblcok[20] : Size of a disk sector assumed by the process that wrote this journal = " + str(sector_size))
-        page_size = struct.unpack('L',bytearray(rblock[24:28]))[0]
+        page_size = int(binascii.hexlify(rblock[24:28]),16)
         print("rblcok[24] : Size of pages in this journal = " + str(page_size))
 
     except ValueError:

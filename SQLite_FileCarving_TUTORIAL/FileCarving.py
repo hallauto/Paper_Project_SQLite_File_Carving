@@ -1,4 +1,6 @@
-import sys, os, FileConnector, struct
+import sys, os, struct, math, binascii
+from FileConnector import FileConnector
+from JournalParsing import JournalParser
 
 
 class FileCarving:
@@ -21,9 +23,9 @@ class FileCarving:
         self.sector_sizes = []  # 카빙해야할 SQLite 저널 파일들이 알려주는 sector size 입니다. 저널파일은 이 크기만큼 헤더가 존재하고 그 이후에 페이지가 시작됩니다. db 파일은 해당 사이즈를 이용하지 않으며, 따라서 -1로 값을 넣습니다.
         self.file_type = []  # 카빙해야할 SQLite 파일 타입을 알려주는 값입니다.
         self.journaled_block_numbers = []  # ExT4 Journal을 파싱해서 확인한 저널링 된 블록들입니다. 이들을 먼저 분석합니다.
-        self.max_block_number = self.fileConnector.file_size / self.fileConnector.block_size  # 현재 분석중인 이미지 파일의 최대 블록 번호입니다.
+        self.max_block_number = int(math.ceil(self.fileConnector.file_size / self.fileConnector.block_size))  # 현재 분석중인 이미지 파일의 최대 블록 번호입니다.
         self.current_block_number = 0  # 현재 분석중인 블록 번호입니다.
-        self.investigate_block_numbers = list[range(0,self.max_block_number)]  # 분석해야할 블록 번호입니다. journaled_block_numbers 들이 먼저 분석되므로, 해당 번호의 블록들은 이 목록에서 이후에 삭제됩니다.
+        self.investigate_block_numbers = list(range(0,self.max_block_number))  # 분석해야할 블록 번호입니다. journaled_block_numbers 들이 먼저 분석되므로, 해당 번호의 블록들은 이 목록에서 이후에 삭제됩니다.
 
     def carving_block(self, block_location):
         """
@@ -36,7 +38,7 @@ class FileCarving:
 
         block_data = self.fileConnector.block_file_read(block_location)  # 검사할 블록을 읽습니다.
         self.investigate_block_numbers.remove(block_location)
-        if self.check_db_file_structure(block_data) or self.check_journal_file_structure():
+        if self.check_db_file_structure(block_data) or self.check_journal_file_structure(block_data):
             return True
         return False
 
@@ -45,10 +47,12 @@ class FileCarving:
         현재 지정된 이미지 파일 전체를 카빙합니다. 해당 카빙 결과는 지정된 디렉토리에 저장됩니다.
         :return:
         """
-        for self.current_block_number in self.investigate_block_numbers:
+
+        while len(self.investigate_block_numbers) > 0:
+            self.current_block_number = self.investigate_block_numbers[0]
             self.carving_block(self.current_block_number)
 
-        for index in range(self.file_many):
+        for index in list(range(0,self.file_many)):
             self.make_file(index)
 
     def make_file(self, index):
@@ -67,7 +71,7 @@ class FileCarving:
 
         page_per_block = abs(self.page_sizes[index] / self.fileConnector.block_size)
 
-        self.fileConnector.file.seek(self.index, 0)
+        self.fileConnector.file.seek(self.head_offsets[index], 0)
         # 먼저 저널 파일을 카빙하는지, DB 파일을 카빙하는지 검사합니다.
         if self.file_type[index] == self.SQLite_DB:
             sql_file_data = self.fileConnector.file.read(self.page_sizes[index])  # 먼저 헤더 부분과 첫번째 페이지를 읽습니다. 이후에 추가 페이지가 존재하는지 검사해야합니다.
@@ -90,46 +94,50 @@ class FileCarving:
             file_name = file_name + "-journal"
             if self.sector_sizes[index] == -1:
                 return False
-            sql_file_data == self.fileConnector.file.read(self.sector_sizes[index] + self.page_sizes[index])
+            sql_file_data = self.fileConnector.file.read(self.sector_sizes[index] + self.page_sizes[index])
             journal_page_data = 'start'
             while len(journal_page_data) > 3:
                 journal_page_data = self.fileConnector.file.read(self.page_sizes[index])
                 # 페이지 번호가 0 이하일 수는 없습니다.
                 try:
-                    if struct.unpack('L', bytearray(journal_page_data[0:4]))[0] <= 0:
+                    if int(binascii.hexlify(journal_page_data[0:4]),16) <= 0:
                         break
                 except ValueError:
                     break
                 sql_file_data += journal_page_data
 
-        with open(file_name,'w') as carved_file:
+        file_name = os.path.join(self.destdir, file_name)
+        print(file_name + "에 작성 완료")
+        with open(file_name,'wb') as carved_file:
             if carved_file.writable():
                 carved_file.write(sql_file_data)
 
     def check_db_file_structure(self, block_data):
-        head_offset = block_data.find(FileCarving.SQLite_HEADER_STRING.encode('utf-8'))
-        if head_offset == -1:
+        find_offset = block_data.find(FileCarving.SQLite_HEADER_STRING.encode('utf-8'))
+        if find_offset == -1:
             return False
 
-        print(str(hex(self.fileConnector.file.tell())) + "헤더 오프셋 {0}이 있습니다. 즉, 이 블록에 SQLite DB파일이 존재합니다.".format(head_offset))
+        # head_offset은 블록 읽기에서 발견한 head 위치 + 현재까지 읽은 파일 위치 - 현재 작업중인 블록의 크기 입니다.
+        head_offset = find_offset + self.fileConnector.file.tell() - self.fileConnector.block_size
+        print(str(hex(self.fileConnector.file.tell())) + " 헤더 오프셋 {0}이 있습니다. 즉, 이 블록에 SQLite DB파일이 존재합니다.".format(hex(head_offset)))
         # 헤더 오프셋이 유효한지 파악하기위해 헤더 오프셋으로 이동합니다.
-        self.fileConnector.file.seek(-1 * (self.fileConnector.block_size - head_offset),1)
+        self.fileConnector.file.seek(-1 * (self.fileConnector.block_size - find_offset),1)
         # 헤더 오프셋에서 블록 사이즈 만큼 읽습니다. 유효한 데이터가 존재하는지 파악하기 위함입니다.
         check_data = self.fileConnector.temp_file_read(self.fileConnector.block_size)
 
-        print("check_data[21] = " + str(check_data[21]))
-        if check_data[21] != 64 and check_data[22] != 32 and check_data[23] != 32:  # 추가로 시그니처 정보를 파악합니다.
-            print(str(hex(self.fileConnector.file.tell() - 512)) + "...그러나 파일은 없네요.")
+        sqlite_version = int(binascii.hexlify(check_data[96:100]),16)
+        print("SQLite Version: " + str(sqlite_version))
+        if sqlite_version > 4000000 or sqlite_version < 3000000:  # 추가로 시그니처 정보를 파악합니다.
+            print(str(hex(self.fileConnector.file.tell() - self.fileConnector.block_size)) + "...그러나 파일은 없네요.")
             return False
 
-        page_size = (check_data[16] * 256 + check_data[17])
+        page_size = int(binascii.hexlify(check_data[16:18]),16)#(check_data[16] * 256 + check_data[17])
         print("page size = " + str(page_size))
         if page_size <= -1:
             return False
 
         # 드디어 파일을 찾았습니다. 해당 파일의 Offset을 정리해서 변수에 저장합니다!
-        # head_offset은 블록 읽기에서 발견한 head 위치 + 현재까지 읽은 파일 위치 - 현재 작업중인 블록의 크기 입니다.
-        self.head_offsets.append(head_offset + self.fileConnector.file.tell() - self.fileConnector.block_size)
+        self.head_offsets.append(head_offset)
         self.page_sizes.append(page_size)
         self.file_type.append(self.SQLite_DB)
         self.sector_sizes.append(-1)
@@ -138,45 +146,49 @@ class FileCarving:
         return True
 
     def check_journal_file_structure(self, block_data):
-        head_offset = block_data.find(FileCarving.SQLite_JOURNAL_HEADER_STRING)
-        if head_offset == -1:
+        find_offset = block_data.find(FileCarving.SQLite_JOURNAL_HEADER_STRING)
+        if find_offset == -1:
             return False
 
+        # head_offset은 블록 읽기에서 발견한 head 위치 + 현재까지 읽은 파일 위치 - 현재 작업중인 블록의 크기 입니다.
+        head_offset = find_offset + self.fileConnector.file.tell() + self.fileConnector.block_size
         print(str(hex(self.fileConnector.file.tell())) + "헤더 오프셋 {0}이 있습니다. 즉, 이 블록에 SQLite 저널 파일이 존재합니다.".format(head_offset))
         # 헤더 오프셋이 유효한지 파악하기위해 헤더 오프셋으로 이동합니다.
         self.fileConnector.file.seek(-1 * (self.fileConnector.block_size - head_offset), 1)
         # 헤더 오프셋에서 블록 사이즈 만큼 읽습니다. 유효한 데이터가 존재하는지 파악하기 위함입니다.
         check_data = self.fileConnector.temp_file_read(self.fileConnector.block_size)
         try:
-            page_count = struct.unpack('L', bytearray(check_data[8:12]))[0]
+            page_count = int(binascii.hexlify(check_data[8:12]),16)
             print("rblcok[8] : The number of pages in the next segment of the journal = " + str(page_count))
-            checksum = struct.unpack('L', bytearray(check_data[12:16]))[0]
+            checksum = int(binascii.hexlify(check_data[12:16]),16)
             print("rblcok[12] : A random nonce for the checksum = " + str(checksum))
-            initial_db_size = struct.unpack('L', bytearray(check_data[16:20]))[0]
+            initial_db_size = int(binascii.hexlify(check_data[16:20]),16)
             print("rblcok[16] : Initial size of the database in pages = " + str(initial_db_size))
-            sector_size = struct.unpack('L', bytearray(check_data[20:24]))[0]
-            print("rblcok[20] : Size of a disk sector assumed by the process that wrote this journal = " + str(
-                sector_size))
-            page_size = struct.unpack('L', bytearray(check_data[24:28]))[0]
+            sector_size = int(binascii.hexlify(check_data[20:24]),16)
+            print("rblcok[20] : Size of a disk sector assumed by the process that wrote this journal = " + str(sector_size))
+            page_size = int(binascii.hexlify(check_data[24:28]),16)
             print("rblcok[24] : Size of pages in this journal = " + str(page_size))
 
         except ValueError:
             return False
+        except struct.error:
+            return False
 
         if initial_db_size <= 0:
-            print("error : initial_page_size = [0]".format(initial_db_size), )
+            print("error : initial_page_size = {0}".format(initial_db_size) )
             return False
         if sector_size <= 0:
-            print("error : sector_size = [0]".format(sector_size), )
+            print("error : sector_size = {0}".format(sector_size) )
             return False
-        if page_size <= 0:
-            print("error : page_size = [0]".format(page_size), )
+        if page_size <= 0 or page_size > 65536:
+            print("error : page_size = {0}".format(page_size) )
             return False
 
         # 드디어 파일을 찾았습니다. 해당 파일의 Offset을 정리해서 변수에 저장합니다!
-        # head_offset은 블록 읽기에서 발견한 head 위치 + 현재까지 읽은 파일 위치 - 현재 작업중인 블록의 크기 입니다.
-        self.head_offsets.append(head_offset + self.fileConnector.file.tell() - self.fileConnector.block_size)
+        self.head_offsets.append(head_offset)
         self.page_sizes.append(page_size)
-        self.file_type.append(self.SQLite_DB)
+        self.file_type.append(self.SQLite_JOURNAL)
         self.sector_sizes.append(sector_size)
         self.file_many += 1
+
+        return True

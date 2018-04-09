@@ -16,23 +16,23 @@ class FileConnector:
         self.file_open(file_name, block_size)
 
     def file_open(self, file_name, block_size=4096):
-        if file_name.find(".journal") or file_name.find("logdump"):
+        if file_name.find(".journal") > -1 or file_name.find("logdump") > -1:
             self.file_type = 'journal'
             self.src_name = file_name
-        elif file_name.find(".dd"):
+        elif file_name.find(".dd") > -1:
             self.file_type = 'dd'
             self.file_size = os.path.getsize(file_name)
             self.block_size = block_size
             self.src_name = file_name
-        elif file_name.find(".image"):
+        elif file_name.find(".image") > -1:
             self.file_type = 'image'
             self.file_size = os.path.getsize(file_name)
             self.block_size = block_size
             self.src_name = file_name
-        elif file_name.find(".db"):
+        elif file_name.find(".db") > -1:
             self.file_type = 'db'
             self.dest_name = file_name
-        elif file_name.find(".db-journal"):
+        elif file_name.find(".db-journal") > -1:
             self.file_type = 'db-journal'
             self.dest_name = file_name
 
