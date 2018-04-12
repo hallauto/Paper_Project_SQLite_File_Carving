@@ -10,7 +10,7 @@ class FileCarving:
     SQLite_DB = 'db'
     SQLite_JOURNAL = 'journal'
 
-    def __init__(self, destdir, fileConnector=None):
+    def __init__(self, destdir, fileConnector: FileConnector=None, journal_fileConnector: FileConnector = None):
         """
         생성자입니다.
         :param destdir: 카빙된 파일이 저장될 디렉토리입니다.
@@ -22,10 +22,24 @@ class FileCarving:
         self.page_sizes = []  # 카빙해야할 SQLite 파일들의 page size 입니다.
         self.sector_sizes = []  # 카빙해야할 SQLite 저널 파일들이 알려주는 sector size 입니다. 저널파일은 이 크기만큼 헤더가 존재하고 그 이후에 페이지가 시작됩니다. db 파일은 해당 사이즈를 이용하지 않으며, 따라서 -1로 값을 넣습니다.
         self.file_type = []  # 카빙해야할 SQLite 파일 타입을 알려주는 값입니다.
-        self.journaled_block_numbers = []  # ExT4 Journal을 파싱해서 확인한 저널링 된 블록들입니다. 이들을 먼저 분석합니다.
         self.max_block_number = int(math.ceil(self.fileConnector.file_size / self.fileConnector.block_size))  # 현재 분석중인 이미지 파일의 최대 블록 번호입니다.
         self.current_block_number = 0  # 현재 분석중인 블록 번호입니다.
         self.investigate_block_numbers = list(range(0,self.max_block_number))  # 분석해야할 블록 번호입니다. journaled_block_numbers 들이 먼저 분석되므로, 해당 번호의 블록들은 이 목록에서 이후에 삭제됩니다.
+
+        self.journal_parser = JournalParser(journal_fileConnector.file) #EXT4저널과 관련된 정보는 전부 JournalParser에 존재합니다.
+
+    def config_journal(self, new_file_Connector):
+        self.journal_parser = JournalParser(new_file_Connector.file)
+
+    def parsing_journal(self):
+        if self.journal_parser.journal_file is None:
+            return False
+        self.journal_parser.parse_whole_file()
+
+        if self.journal_parser.transaction_number < 0:
+            return False
+        if self.journal_parser.journal_start_block < 0:
+            return False
 
     def carving_block(self, block_location):
         """
@@ -42,11 +56,7 @@ class FileCarving:
             return True
         return False
 
-    def carving_whole_file(self):
-        """
-        현재 지정된 이미지 파일 전체를 카빙합니다. 해당 카빙 결과는 지정된 디렉토리에 저장됩니다.
-        :return:
-        """
+    def carving_rest_file(self):
 
         while len(self.investigate_block_numbers) > 0:
             self.current_block_number = self.investigate_block_numbers[0]
@@ -55,7 +65,31 @@ class FileCarving:
         for index in list(range(0,self.file_many)):
             self.make_file(index)
 
-    def make_file(self, index):
+    def carving_whole_file(self):
+        """
+            현재 지정된 이미지 파일 전체를 카빙합니다. 해당 카빙 결과는 지정된 디렉토리에 저장됩니다.
+            :return:
+        """
+
+        if len(self.investigate_block_numbers) < self.max_block_number:
+            self.investigate_block_numbers = list(range(0, self.max_block_number))
+
+        self.carving_rest_file()
+
+    def carving_journaled_block(self):
+        if self.journal_parser.file is None:
+            print("Please set Journal Parser first.")
+            return False
+
+        if self.journal_parser.transaction_number < 1:
+            print("There is no Transation Journal")
+            return False
+
+        for journal_block_num in self.journal_parser.journal_results:
+            if self.carving_block(journal_block_num * self.fileConnector.block_size):
+                self.make_file(self.file_many-1, file_name=self.journal_parser.journal_results[journal_block_num] + "block journaled ")
+
+    def make_file(self, index = 0, file_name = ""):
         """
         지시된 인덱스에 저장된 오프셋, 사이즈에 따라 파일을 카빙합니다. 카빙된 부분도 분석할 블록 목록에서 제거해야합니다.
         :param index: page_sizes,head_offsets 등에 접근할 때 쓸 색인입니다.
@@ -67,7 +101,7 @@ class FileCarving:
         if len(self.page_sizes) != len(self.head_offsets):
             return False
 
-        file_name = "file_number {0} carved_{1}.db".format(index, self.head_offsets[index])
+        file_name += "file_number {0} carved_{1}.db".format(index, self.head_offsets[index])
 
         page_per_block = abs(self.page_sizes[index] / self.fileConnector.block_size)
 

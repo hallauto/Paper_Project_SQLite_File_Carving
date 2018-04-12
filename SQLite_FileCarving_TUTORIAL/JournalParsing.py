@@ -10,7 +10,8 @@ class JournalTypeEnum(IntEnum):
     revocation = 5
 
 class JournalParser:
-    def __init__(self):
+    def __init__(self, journal_file=None):
+        self.journal_file = journal_file
         self.journal_start_block = 0
         self.transaction_number = 0
 
@@ -34,8 +35,8 @@ class JournalParser:
         if input_text is '':
             return
         if 'transaction' in original_text:
-            (journal_start_block, transaction_number) = self.parse_journal_head(original_text)
-            print('해당 저널은 {0}번 블록에서 시작하며,  {1}개수의 트랜잭션을 저널링했습니다.'.format(journal_start_block, transaction_number))
+            (self.journal_start_block, self.transaction_number) = self.parse_journal_head(original_text)
+            print('해당 저널은 {0}번 블록에서 시작하며,  {1}개수의 트랜잭션을 저널링했습니다.'.format(self.journal_start_block, self.transaction_number))
             return
         if 'end of journal' in original_text:
             # (end_transaction_number, journal_end_block) = parse_journal_tale(original_text)
@@ -53,7 +54,9 @@ class JournalParser:
 
         print('저널 {0}번은 {1} 타입의 {2}번 블록을 가리킵니다.'.format(self.journal_sequence, self.journal_type_name, self.journal_results[self.journal_results.__len__() - 1]))
 
-    def parse_whole_file(self, journal_file):
+    def parse_whole_file(self, journal_file = None):
+        if journal_file is None:
+            journal_file = self.journal_file
         try:
             for one_line_text in journal_file.readlines():
                 self.parse_one_line(one_line_text)

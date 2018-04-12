@@ -64,7 +64,7 @@ while (len(rblock) > 1):
         rblock = rf.read(page_size)
         #페이지 번호가 0 이하일 수는 없습니다.
         try:
-            if struct.unpack('L',bytearray(rblock[0:4]))[0] <= 0:
+            if int(binascii.hexlify(rblock[0:4])) <= 0:
                 break
         except ValueError:
             break
