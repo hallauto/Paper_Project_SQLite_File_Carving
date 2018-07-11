@@ -10,7 +10,7 @@ class FileCarving:
     SQLite_DB = 'db'
     SQLite_JOURNAL = 'journal'
 
-    def __init__(self, destdir, fileConnector: FileConnector=None, journal_fileConnector: FileConnector = None):
+    def __init__(self, destdir="", fileConnector: FileConnector=None, journal_fileConnector: FileConnector = None):
         """
         생성자입니다.
         :param destdir: 카빙된 파일이 저장될 디렉토리입니다.
@@ -18,6 +18,7 @@ class FileCarving:
         self.destdir = destdir
         self.fileConnector = fileConnector
         self.file_many = 0
+        self.journal_concerned_file = 0
         self.head_offsets = []  # 카빙해야할 파일들의 head가 시작되는 offset입니다.
         self.page_sizes = []  # 카빙해야할 SQLite 파일들의 page size 입니다.
         self.sector_sizes = []  # 카빙해야할 SQLite 저널 파일들이 알려주는 sector size 입니다. 저널파일은 이 크기만큼 헤더가 존재하고 그 이후에 페이지가 시작됩니다. db 파일은 해당 사이즈를 이용하지 않으며, 따라서 -1로 값을 넣습니다.
@@ -27,6 +28,8 @@ class FileCarving:
         self.investigate_block_numbers = list(range(0,self.max_block_number))  # 분석해야할 블록 번호입니다. journaled_block_numbers 들이 먼저 분석되므로, 해당 번호의 블록들은 이 목록에서 이후에 삭제됩니다.
 
         self.journal_parser = JournalParser(journal_fileConnector.file) #EXT4저널과 관련된 정보는 전부 JournalParser에 존재합니다.
+
+        self.report_file = open(self.destdir + r"\reprot.txt","w")
 
     def config_journal(self, new_file_Connector):
         self.journal_parser = JournalParser(new_file_Connector.file)
@@ -48,13 +51,16 @@ class FileCarving:
         :return:
         """
 
+        print("{0}번 블록 검사중".format(block_location))
+
         self.current_block_number = block_location
 
         block_data = self.fileConnector.block_file_read(block_location)  # 검사할 블록을 읽습니다.
-        self.investigate_block_numbers.remove(block_location)
+        self.investigate_block_numbers.remove(block_location) #곧 검사할 블록을 검사할 블록 리스트에서 제거합니다.
         if self.check_db_file_structure(block_data) or self.check_journal_file_structure(block_data):
             return True
-        return False
+        else:
+            return False
 
     def carving_rest_file(self):
 
@@ -65,6 +71,8 @@ class FileCarving:
         for index in list(range(0,self.file_many)):
             self.make_file(index)
 
+        self.report_file.write("저널과 무관한 {0}블록 중 파일이 존재하는 블록은 {1}개\n".format(self.max_block_number - len(self.journal_parser.journal_results), self.file_many))
+
     def carving_whole_file(self):
         """
             현재 지정된 이미지 파일 전체를 카빙합니다. 해당 카빙 결과는 지정된 디렉토리에 저장됩니다.
@@ -72,12 +80,12 @@ class FileCarving:
         """
 
         if len(self.investigate_block_numbers) < self.max_block_number:
-            self.investigate_block_numbers = list(range(0, self.max_block_number))
+            self.investigate_block_numbers = list(range(0,self.max_block_number))
 
         self.carving_rest_file()
 
     def carving_journaled_block(self):
-        if self.journal_parser.file is None:
+        if self.journal_parser.journal_file is None:
             print("Please set Journal Parser first.")
             return False
 
@@ -85,9 +93,42 @@ class FileCarving:
             print("There is no Transation Journal")
             return False
 
+
+        self.report_file.write("저널 {0}개 중\n".format(len(self.journal_parser.journal_results)))
         for journal_block_num in self.journal_parser.journal_results:
-            if self.carving_block(journal_block_num * self.fileConnector.block_size):
-                self.make_file(self.file_many-1, file_name=self.journal_parser.journal_results[journal_block_num] + "block journaled ")
+            mean = journal_block_num - 5
+            max = journal_block_num + 5
+            if journal_block_num < 5:
+                mean = 0
+            elif journal_block_num > self.max_block_number - 6:
+                max = self.max_block_number
+            for carving_block_num in list(range(mean,max)):
+                if carving_block_num not in self.investigate_block_numbers:
+                    continue
+                print("저널 {0}개 중".format(len(self.journal_parser.journal_results)))
+                print("{0}번째 저널 확인".format(carving_block_num))
+                print("저널된 {0}블록 카빙".format(carving_block_num))
+
+                self.report_file.write("{0}번째 저널 확인\n".format(carving_block_num))
+                self.report_file.write("저널된 {0}블록 카빙\n".format(carving_block_num))
+                before_file_many = self.file_many
+                self.carving_block(carving_block_num)
+                if before_file_many < self.file_many:
+                    self.make_file(self.file_many-1, file_name=carving_block_num + "block journaled ")
+                    self.report_file.write("저널된 {0}블록 파일 존재\n".format(carving_block_num))
+                else:
+                    self.report_file.write("{0}블록 파일 없음\n".format(carving_block_num))
+
+        self.report_file.write("저널된 {0}개의 블록과 그 주위 10개 블록 중 파일이 존재하는 블록은 {1}개\n".format(journal_block_num, self.file_many))
+        self.journal_concerned_file_many = self.file_many
+        self.file_many = 0
+        self.head_offsets = []  # 카빙해야할 파일들의 head가 시작되는 offset입니다.
+        self.page_sizes = []  # 카빙해야할 SQLite 파일들의 page size 입니다.
+        self.sector_sizes = []  # 카빙해야할 SQLite 저널 파일들이 알려주는 sector size 입니다. 저널파일은 이 크기만큼 헤더가 존재하고 그 이후에 페이지가 시작됩니다. db 파일은 해당 사이즈를 이용하지 않으며, 따라서 -1로 값을 넣습니다.
+        self.file_type = []
+
+    def report_end(self):
+        self.report_file.close()
 
     def make_file(self, index = 0, file_name = ""):
         """
@@ -185,7 +226,7 @@ class FileCarving:
             return False
 
         # head_offset은 블록 읽기에서 발견한 head 위치 + 현재까지 읽은 파일 위치 - 현재 작업중인 블록의 크기 입니다.
-        head_offset = find_offset + self.fileConnector.file.tell() + self.fileConnector.block_size
+        head_offset = find_offset + self.fileConnector.file.tell() - self.fileConnector.block_size
         print(str(hex(self.fileConnector.file.tell())) + "헤더 오프셋 {0}이 있습니다. 즉, 이 블록에 SQLite 저널 파일이 존재합니다.".format(head_offset))
         # 헤더 오프셋이 유효한지 파악하기위해 헤더 오프셋으로 이동합니다.
         self.fileConnector.file.seek(-1 * (self.fileConnector.block_size - head_offset), 1)

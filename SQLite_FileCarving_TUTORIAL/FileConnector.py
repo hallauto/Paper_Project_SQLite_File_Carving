@@ -1,4 +1,4 @@
-import sys,os
+import sys,os,struct
 
 class FileConnector:
     """ 기존 파일은 다양한 파일시스템에서 사용 가능하지 못할듯 합니다.
@@ -13,7 +13,6 @@ class FileConnector:
         self.block_size = -1
         self.dest_name = -1
         self.src_name = -1
-        self.file_open(file_name, block_size)
 
     def file_open(self, file_name, block_size=4096):
         if file_name.find(".journal") > -1 or file_name.find("logdump") > -1:
@@ -74,6 +73,24 @@ class FileConnector:
 
             read_data = self.file.read(self.block_size)
             return read_data
+        except IOError as error:
+            print("There isn't block number {0}")
+            return ''
+
+#ext 메타데이터는 small_endian을 사용합니다. 이를 변환하는 것을 잊지 맙시다. 아래의 함수는 해당 변환까지 처리하고 블록을 읽어주는 함수입니다.
+    def block_file_read_small_to_big(self, block_number):
+        try:
+            self.file.seek(block_number * self.block_size,0)
+            if self.file.readable() is False:
+                print("There isn't block number {0}".format(block_number))
+
+            read_data = self.file.read(self.block_size)
+
+            converted_data = bytearray(len(read_data))
+            converted_data[0::2] = read_data[1::2]
+            converted_data[1::2] = read_data[0::2]
+
+            return converted_data
         except IOError as error:
             print("There isn't block number {0}")
             return ''

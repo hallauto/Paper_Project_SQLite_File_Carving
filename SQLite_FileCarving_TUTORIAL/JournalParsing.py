@@ -24,8 +24,8 @@ class JournalParser:
         original_text = input_text
         journal_head_parser = re.compile(r'\d+')
         parser_result = journal_head_parser.findall(original_text)
-        journal_start_block = parser_result[0]
-        transaction_number = parser_result[1]
+        journal_start_block = int(parser_result[0])
+        transaction_number = int(parser_result[1])
 
         return journal_start_block, transaction_number
 
@@ -47,10 +47,10 @@ class JournalParser:
         journal_sequence_parser = re.compile(r'\d+')
         parser_result = journal_sequence_parser.findall(trimmed_text1)
         print(parser_result)
-        self.journal_sequence = parser_result[0]
+        self.journal_sequence = int(parser_result[0])
         self.journal_type = parser_result[1]
         self.journal_type_name = JournalTypeEnum(int(self.journal_type)).name
-        self.journal_results.append(parser_result[2])
+        self.journal_results.append(int(parser_result[2]))
 
         print('저널 {0}번은 {1} 타입의 {2}번 블록을 가리킵니다.'.format(self.journal_sequence, self.journal_type_name, self.journal_results[self.journal_results.__len__() - 1]))
 
