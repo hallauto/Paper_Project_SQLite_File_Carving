@@ -19,4 +19,7 @@ fileConnector.file_open(image_file)
 ExTCarver = EXTCarving(fileConnector)
 ExTCarver.find_journal_superblock()
 ExTCarver.find_superblock()
+for index in range(len(ExTCarver.superblock_number_list)):
+    ExTCarver.parsing_super_block(index)
+ExTCarver.find_group_descriptor()
 print('find is end')

@@ -47,24 +47,45 @@ class FileConnector:
         except Exception as error:
             print("An exception happened: " + str(error))
 
+#file의 포인터를 0으로 리셋합니다.
     def reset_file_point(self):
         self.file.seek(0)
 
+#file의 일정 크기를 읽습니다. 이 읽기 작업은 file의 포인터에 영향을 주지 않습니다.
     def temp_file_read(self, read_size):
         original_location = self.file.tell()
         read_data = self.file.read(read_size)
         self.file.seek(original_location, 0)
         return read_data
 
+#file의 특정 블록을 읽습니다. 이 읽기 작업은 file의 포인터에 영향을 주지 않습니다.
+    def temp_block_read(self, block_number):
+        original_location = self.file.tell()
+        try:
+            self.file.seek(block_number * self.block_size,0)
+            if self.file.readable() is False:
+                print("There isn't block number {0}".format(block_number))
+
+            read_data = self.file.read(self.block_size)
+        except IOError as error:
+            print("There isn't block number {0}")
+            return ''
+        finally:
+            self.file.seek(original_location, 0)
+        return read_data
+
+#기존의 file 포인터를 저장합니다. 이를 변경해서 다음 함수가 특정 포인터로 빠르게 접근할 수 있게 만들거나, 특정 작업후 기존 포인터로 귀환하는 것이 가능합니다.
     def save_original_seek(self):
         self.mem_point = self.file.tell()
 
+#저장해두었던 file 포인터로 이동합니다.
     def load_original_seek(self):
         if self.mem_point == -1:
             return
         self.file.seek(self.mem_point,0)
         self.mem_point = -1
 
+#file의 특정 블록을 읽습니다.
     def block_file_read(self, block_number):
         try:
             self.file.seek(block_number * self.block_size,0)
@@ -77,6 +98,7 @@ class FileConnector:
             print("There isn't block number {0}")
             return ''
 
+#아래의 함수가 제대로 작동하지 않습니다. 너무 다양한 길이의 타입이 존재해서 이를 읽고 타입에 따라 엔디안을 처리하는 것은 효율적이지 않습니다.
 #ext 메타데이터는 small_endian을 사용합니다. 이를 변환하는 것을 잊지 맙시다. 아래의 함수는 해당 변환까지 처리하고 블록을 읽어주는 함수입니다.
     def block_file_read_small_to_big(self, block_number):
         try:
