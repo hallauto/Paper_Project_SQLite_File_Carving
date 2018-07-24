@@ -1,6 +1,6 @@
 import FileCarving
 import FileConnector
-from ExTCarving import EXTCarving
+from ExTCarving import EXTCarving, ExTJournalCarving
 
 image_file = r"F:\Android_x86_image\4월15일\sda1.dd"
 print("Inputed image file. {0}".format(image_file))
@@ -17,9 +17,11 @@ else:
 fileConnector.file_open(image_file)
 
 ExTCarver = EXTCarving(fileConnector)
-ExTCarver.find_journal_superblock()
+ExTCarver.journal_carver.find_journal_superblock()
+ExTCarver.journal_carver.parse_journal_superblock()
 ExTCarver.find_superblock()
 for index in range(len(ExTCarver.superblock_number_list)):
     ExTCarver.parsing_super_block(index)
 ExTCarver.find_group_descriptor()
+ExTCarver.journal_carver.find_journal_log()
 print('find is end')
