@@ -200,14 +200,16 @@ class ExTJournalCarving:
             if (journal_block_flag is self.EXT_J_DB_FLAG):
                 temp_journal_log = ExTJournalLog(journal_log_number,self.journal_superblock_offset)
                 temp_journal_log.block_number_list.append(current_block_number)
-                temp_journal_log.descriptor_number = current_block_number
+                temp_journal_log.descriptor_block_number = current_block_number
                 temp_journal_log.descriptor_content = content
                 temp_journal_log.whole_content.append(content)
+
+                current_block_number += 1
                 data_block_number = 0
+                data_block_content = self.file_connector.block_file_read(current_block_number)
+                journal_block_flag = self.check_journal_block(data_block_content)
                 #이제 데이터 블록을 확보합니다. 데이터 블록들은 디스크립터 블록과 커밋/리보크 블록 사이에 존재합니다.
                 while (journal_block_flag is self.EXT_J_CB_FLAG or journal_block_flag is self.EXT_J_RB_FLAG) is False:
-                    data_block_content = self.file_connector.block_file_read(current_block_number)
-                    journal_block_flag = self.check_journal_block(data_block_content)
                     temp_journal_log.data_block_number_list.append(current_block_number)
                     temp_journal_log.data_block_content_list.append([])
                     temp_journal_log.data_block_content_list[data_block_number] = data_block_content
@@ -215,33 +217,64 @@ class ExTJournalCarving:
                     temp_journal_log.whole_content.append(data_block_content)
                     current_block_number += 1
                     data_block_number += 1
+                    data_block_content = self.file_connector.block_file_read(current_block_number)
+                    journal_block_flag = self.check_journal_block(data_block_content)
                     if data_block_number > 100:
                         break
 
                 if data_block_number > 100:
                     break
                 #커밋/리보크 블록이 발견되었습니다. 해당 저널 로그가 완성되었습니다. 이를 백업합니다.
+                temp_journal_log.block_many = data_block_number + 2 #저널 로그의 전체 블록 갯수는 데이터블록 갯수 + 디스크립터 블록(1개) + 커밋/리보크 블록(1개) 입니다.
                 temp_journal_log.end_block_number = current_block_number
                 temp_journal_log.end_block_flag = journal_block_flag
                 temp_journal_log.end_block_content = self.file_connector.block_file_read(temp_journal_log.end_block_number)
                 temp_journal_log.whole_content.append(temp_journal_log.end_block_content)
                 self.journal_log_list.append(temp_journal_log)
 
+            #성공적으로 하나의 저널로그를 파싱했습니다. 이제 다음 저널 로그가 존재하는지 검사합니다. 다음 저널로그가 존재한다면 바로 디스크립터 블록이 존재할 것이고, 아니면 저널 영역이 끝났다는 의미입니다.
+            journal_log_number += 1
             current_block_number += 1
             content = self.file_connector.block_file_read(current_block_number)
             journal_block_flag = self.check_journal_block(content)
 
-            self.file_connector.load_original_seek()
+        self.file_connector.load_original_seek()
 
         return
 
     def print_journal_logs(self):
         return_text = ''
         for journal_log in self.journal_log_list:
-            return_text + "저널 로그 번호: {0}\n,저널 디스크립터 블록 번호: {1}\n,저널 데이터 블록 갯수: {2}\n".format()
+            return_text = return_text + "저널 로그 번호: {0},\t저널 디스크립터 블록 번호: {1},\t저널 데이터 블록 갯수: {2}\n".format(journal_log.journal_log_number, journal_log.descriptor_block_number, len(journal_log.data_block_content_list))
+            return_text = return_text + "저널 종료 블록 종류: {0},\t저널 종료 블록 번호: {1},\t저널 전체 길이: {2},\t저널 전체 블록 갯수: {3}\n".format(journal_log.end_block_flag, journal_log.end_block_number, len(journal_log.whole_content), journal_log.block_many)
 
+        return return_text
 
-    #def find_sqlite_directory_entry(self):
+    def find_sqlite_directory_entry(self, journal_log):
+        for data_block in journal_log.data_block_content_list:
+            db_offset_list = []
+            journal_offset_list = []
+            #먼저 하나의 데이터블록에 몇개의 db, db-journal 파일이 있는지 검사합니다. .db로 검색하면 .db-journal 파일도 검색되는 점을 유념해서 계산합시다.
+            journal_file_many = data_block.count('.db-journal')
+            db_file_many = data_block.count('.db') - journal_file_many
+
+            db_offset = -1
+            journal_offset = -1
+            for until in list(journal_file_many):
+                journal_offset = data_block.find('.db-journal', journal_offset)
+                if journal_offset < 0:
+                    break
+                else:
+                    journal_offset_list.append(journal_offset)
+            for until in list(db_file_many):
+                db_offset = data_block.find('.db', db_offset)
+                if db_offset < 0:
+                    break
+                elif journal_offset_list.count(db_offset) > 0:
+                    continue
+                else:
+                    db_offset_list.append(db_offset)
+
 
     def parse_journal_superblock(self):
         self.journal_block_length = int.from_bytes(self.journal_superblock_content[0x0C:0x10],'big')
