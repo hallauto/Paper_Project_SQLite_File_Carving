@@ -1,5 +1,6 @@
 import re
 import math
+import string
 from FileConnector import FileConnector
 from enum import IntEnum
 
@@ -160,7 +161,28 @@ class ExTJournalCarving:
 
         return 0
 
+#파일 이름이 유효한지 파악하는 함수입니다. 디렉토리 엔트리에서 파일 이름을 확보하는 작업이나 파일 이름이 유효한지 검사하는 작업에 쓰입니다.
+    def check_file_name(self, file_name):
+        #ExT4에서 유효한 파일 명들을 저장했습니다.
+        valid_chars = "-_.() %s%s" % (string.ascii_letters, string.digits)
+        valid_chars = bytearray(valid_chars,'ascii')
 
+        if type(file_name) is int or len(file_name) is 1 :
+            if file_name not in valid_chars:
+                return False
+            else:
+                return True
+        else:
+            for file_character in file_name:
+                if file_character not in valid_chars:   #유효한 문자 외의 문자가 있는지 검사합니다.
+                    return False
+
+            # ExT4에서 파일명의 첫 글자가 특수문자이면 안됩니다.
+            if file_name[0] in b"-_.() ":
+                return False
+            return True
+
+        return True
 
 #저널 수퍼블록을 카빙하는 함수입니다.
     def find_journal_superblock(self):
@@ -242,32 +264,25 @@ class ExTJournalCarving:
 
         return
 
-    def print_journal_logs(self):
-        return_text = ''
-        for journal_log in self.journal_log_list:
-            return_text = return_text + "저널 로그 번호: {0},\t저널 디스크립터 블록 번호: {1},\t저널 데이터 블록 갯수: {2}\n".format(journal_log.journal_log_number, journal_log.descriptor_block_number, len(journal_log.data_block_content_list))
-            return_text = return_text + "저널 종료 블록 종류: {0},\t저널 종료 블록 번호: {1},\t저널 전체 길이: {2},\t저널 전체 블록 갯수: {3}\n".format(journal_log.end_block_flag, journal_log.end_block_number, len(journal_log.whole_content), journal_log.block_many)
-
-        return return_text
-
+    #특정 저널로그의 각각의 데이터 블록에서 sqlite db 파일, 저널 파일에 해당하는 디렉토리 엔트리를 확보하는 함수입니다.
     def find_sqlite_directory_entry(self, journal_log):
         for data_block in journal_log.data_block_content_list:
             db_offset_list = []
             journal_offset_list = []
             #먼저 하나의 데이터블록에 몇개의 db, db-journal 파일이 있는지 검사합니다. .db로 검색하면 .db-journal 파일도 검색되는 점을 유념해서 계산합시다.
-            journal_file_many = data_block.count('.db-journal')
-            db_file_many = data_block.count('.db') - journal_file_many
+            journal_file_many = data_block.count(b'.db-journal')
+            db_file_many = data_block.count(b'.db') - journal_file_many
 
             db_offset = -1
             journal_offset = -1
-            for until in list(journal_file_many):
-                journal_offset = data_block.find('.db-journal', journal_offset)
+            for until in range(journal_file_many):
+                journal_offset = data_block.find(b'.db-journal', journal_offset + 1)
                 if journal_offset < 0:
                     break
                 else:
                     journal_offset_list.append(journal_offset)
-            for until in list(db_file_many):
-                db_offset = data_block.find('.db', db_offset)
+            for until in range(db_file_many):
+                db_offset = data_block.find(b'.db', db_offset + 1)
                 if db_offset < 0:
                     break
                 elif journal_offset_list.count(db_offset) > 0:
@@ -275,13 +290,73 @@ class ExTJournalCarving:
                 else:
                     db_offset_list.append(db_offset)
 
+#확보한 오프셋은 파일 확장자 명이 시작하는 부분의 오프셋입니다. 이 오프셋 이전부터는 파일 이름과 디렉토리 엔트리 정보가 들어있으며, 이 점을 고려해서 파일 확장자명이 시작하는 부분을 기준으로 조사합니다.
+            for journal_name_offset in journal_offset_list:
+                journal_name_start = journal_name_offset
+                journal_file_name = []
+                while self.check_file_name(data_block[journal_name_start - 1]):
+                    journal_name_start -= 1
+                    journal_file_name.insert(0,data_block[journal_name_start])
 
+                if self.check_file_name(journal_file_name) is False:
+                    continue
+
+                journal_file_name_length = int.from_bytes(data_block[journal_name_start - 2: journal_name_start - 1], 'little')
+                journal_entry_length = int.from_bytes(data_block[journal_name_start - 4: journal_name_start - 2], 'little')
+                journal_i_node_number = int.from_bytes(data_block[journal_name_start - 8: journal_name_start - 4], 'little')
+                journal_entry_content = data_block[journal_name_start - 8: journal_name_start - 8 + journal_entry_length]
+                journal_file_name = data_block[journal_name_start:journal_name_offset]
+                journal_file_name = journal_file_name + b'.db-journal'
+                tmp_journal_entry = ExTDirectoryEntry(journal_i_node_number, journal_entry_length, journal_file_name_length, journal_file_name, journal_entry_content)
+                journal_log.journal_entry_list.append(tmp_journal_entry)
+                journal_log.whole_entry_list.append(tmp_journal_entry)
+
+            for db_name_offset in db_offset_list:
+                db_name_start = db_name_offset
+                db_file_name = []
+                while self.check_file_name(data_block[db_name_start - 1]):
+                    db_name_start -= 1
+                    db_file_name.insert(0, data_block[db_name_start])
+
+                if self.check_file_name(db_file_name) is False:
+                    continue
+
+                db_file_name_length = int.from_bytes(data_block[db_name_start - 2: db_name_start - 1], 'little')
+                db_entry_length = int.from_bytes(data_block[db_name_start - 4: db_name_start - 2], 'little')
+                db_i_node_number = int.from_bytes(data_block[db_name_start - 8: db_name_start - 4], 'little')
+                db_entry_content = data_block[db_name_start - 8: db_name_start - 8 + db_entry_length]
+                db_file_name = data_block[db_name_start:db_name_offset]
+                db_file_name = db_file_name + b'.db'
+
+                if db_file_name_length is not len(db_file_name):
+                    continue
+                tmp_db_entry = ExTDirectoryEntry(db_i_node_number, db_entry_length, db_file_name_length, db_file_name, db_entry_content)
+                journal_log.db_entry_list.append(tmp_db_entry)
+                journal_log.whole_entry_list.append(tmp_db_entry)
+
+            #데이터 블록 한개의 분석이 끝났습니다. 다음 데이터 블록으로 이동합니다.
+
+    def print_journal_logs(self):
+        return_text = ''
+        for journal_log in self.journal_log_list:
+            return_text = return_text + journal_log.print_journal_log()
+
+        return return_text
+
+    def prints_whole_entry(self):
+        return_text = ''
+        for journal_log in self.journal_log_list:
+            return_text = return_text + journal_log.prints_whole_entry()
+
+        return return_text
+
+#저널 수퍼블록의 내용을 파싱하는 함수입니다.
     def parse_journal_superblock(self):
         self.journal_block_length = int.from_bytes(self.journal_superblock_content[0x0C:0x10],'big')
         self.journal_block_many = int.from_bytes(self.journal_superblock_content[0x10:0x14],'big')
         self.journal_block_start_number = int.from_bytes(self.journal_superblock_content[0x18:0x1C],'big')
         self.journal_block_start_offset = self.file_connector.block_size * self.journal_block_start_number
-        
+
         print('journal 블록 크기: {0}'.format(self.journal_block_length))
         print('journal 전체 갯수: {0}({1})'.format(self.journal_block_many,hex(self.journal_block_many)))
 
@@ -311,6 +386,55 @@ class ExTJournalLog:
         self.end_block_content = []
         self.data_block_content_list = [] #저널 로그의 데이터 블록 각각의 내용을 담고있습니다.
         self.data_block_whole_content_list = [] #저널 로그의 데이터 블록 내용 전체를 하나의 리스트로 담고있습니다.
+
+        self.journal_entry_list = [] #저널 로그의 데이터블록에서 확보한 저널 파일 엔트리 리스트입니다.
+        self.db_entry_list = [] #저널 로그의 데이터 블록에서 확보한 db 파일 엔트리 리스트입니다.
+        self.whole_entry_list = []
+
+    def print_journal_log(self):
+        return_text = ''
+        return_text = return_text + "저널 로그 번호: {0},\t저널 디스크립터 블록 번호: {1},\t저널 데이터 블록 갯수: {2}\n".format(self.journal_log_number, self.descriptor_block_number,len(self.data_block_content_list))
+        return_text = return_text + "저널 종료 블록 종류: {0},\t저널 종료 블록 번호: {1},\t저널 전체 길이: {2},\t저널 전체 블록 갯수: {3}\n".format(self.end_block_flag, self.end_block_number, len(self.whole_content), self.block_many)
+
+        return return_text
+
+    def prints_journal_entry(self):
+        return_text = ''
+        for entry in self.journal_entry_list:
+            return_text = return_text + "저널 로그 번호: {0}\t".format(self.journal_log_number) + entry.print_entry()
+
+        return return_text
+
+    def prints_db_entry(self):
+        return_text = ''
+        for entry in self.db_entry_list:
+            return_text = return_text + "저널 로그 번호: {0}\t".format(self.journal_log_number) + entry.print_entry()
+
+        return return_text
+
+    def prints_whole_entry(self):
+        return_text = ''
+        for entry in self.whole_entry_list:
+            return_text = return_text + "저널 로그 번호: {0}\t".format(self.journal_log_number) + entry.print_entry()
+
+        return return_text
+
+class ExTDirectoryEntry:
+    def __init__(self, i_node_number, entry_length, file_name_length, file_name, entry_content):
+        self.file_name = file_name
+        self.file_extension = self.file_name.partition(b'.')[-1]
+        self.file_name_length = file_name_length
+        self.i_node_number = i_node_number
+        self.entry_length = entry_length
+        self.group_descriptor_number = -1
+        self.entry_content = entry_content
+
+    def print_entry(self):
+        return_text = ''
+        return_text = return_text + "디렉토리 엔트리 i-node 번호: {0},\t디렉토리 엔트리 길이: {1},\t디렉토리 엔트리 파일 이름 길이: {2}\n".format(self.i_node_number, self.entry_length, self.file_name_length)
+        return_text = return_text + "디렉토리 엔트리 파일 종류: {0},\t디렉토리 엔트리 파일 이름: {1},\t디렉토리 엔트리 전체 길이: {2},\t디렉토리 엔트리 전체 출력: {3}\n".format(self.file_extension, self.file_name, len(self.entry_content), self.entry_content)
+
+        return return_text
 
 class SuperBlockCarver:
 

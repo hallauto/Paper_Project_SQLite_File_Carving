@@ -2,9 +2,9 @@ import FileCarving
 import FileConnector
 from ExTCarving import EXTCarving, ExTJournalCarving
 
-image_file = r"F:\Android_x86_image\4월16일\sda1-10.dd"
+image_file = r"F:\Android_x86_image\4월15일\sda1.dd"
 print("Inputed image file. {0}".format(image_file))
-directory = r"F:\Android_x86_image\4월16일\carved"
+directory = r"F:\Android_x86_image\4월15일\carved"
 print("Inputed directory for output {0}".format(directory))
 block_size = 4096
 print("Inputed block size. {0}".format(block_size))
@@ -25,4 +25,7 @@ for index in range(len(ExTCarver.superblock_number_list)):
 ExTCarver.find_group_descriptor()
 ExTCarver.journal_carver.find_journal_log()
 print(ExTCarver.journal_carver.print_journal_logs())
+for journal_log in ExTCarver.journal_carver.journal_log_list:
+    ExTCarver.journal_carver.find_sqlite_directory_entry(journal_log)
+print(ExTCarver.journal_carver.prints_whole_entry())
 print('find is end')
