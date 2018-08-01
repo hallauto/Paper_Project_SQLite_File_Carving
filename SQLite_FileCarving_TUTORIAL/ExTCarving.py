@@ -21,6 +21,7 @@ class EXTCarving:
         self.journal_carver = ExTJournalCarving(file_connector)
 
         self.super_b_carver = SuperBlockCarver(file_connector)
+        self.superblock_many = 0
         self.superblock_number_list = []
         self.superblock_content_list = []
         self.superblock_former_offset = -1
@@ -56,6 +57,7 @@ class EXTCarving:
             self.superblock_number_list.append(math.floor(superblock_offset / self.file_connector.block_size))
             self.superblock_content_list.append(rblock)
             self.fwrite_superblock(superblock_offset, len(self.superblock_content_list) - 1)
+            self.superblock_many += 1
             index += 1
 
         self.file_connector.load_original_seek()
@@ -109,7 +111,20 @@ class EXTCarving:
         print('group descriptor 길이? : {0}'.format(self.group_descriptor_length_list[0]))
 
 #발견한 그룹 디스크립터 내용을 파싱합니다.
-    #def parsing_group_descriptor(self, group_descriptor_list_index):
+    def parsing_group_descriptor(self, superblock_index, group_descriptor_index):
+        if superblock_index < 0 or superblock_index > self.superblock_many:
+            return
+        elif group_descriptor_index < 0 or group_descriptor_index > self.group_descriptor_many_list[superblock_index]:
+            return
+
+        content = self.group_descriptor_content_list[superblock_index][group_descriptor_index]
+        bg_block_bitmap_lo = int.from_bytes(content[0:4], 'little')
+        bg_inode_bitmap_lo = int.from_bytes(content[4:8], 'little')
+        bg_free_blocks_count_lo = int.from_bytes(content[8:0xC], 'little')
+        bg_free_inodes_count_lo = int.from_bytes(content[0xC:0xE], 'little')
+
+
+
 
 
 
@@ -201,9 +216,6 @@ class ExTJournalCarving:
             break
 
         self.file_connector.load_original_seek()
-
-#파싱한 저널 수퍼블록에서 얻은 내용을 토대로 descriptor 블록을 카빙합니다. - 현재 저널 수퍼블록에서 얻은 내용이 무효화된 저널을 가리키지 않는 문제가 있습니다. 따라서 시그니처를 기반으로 카빙하는 코드가 필요합니다.
-    #def find_journal_descriptorblock(self):
 
 #저널 블록에서 저널 로그들을 확보합니다. 하나의 저널 로그는 하나의 디스크립터 블록으로 시작, 이후에 데이터블록들이 나오고 최후에 커밋 블록이나 리보크 블록이 나오는 것으로 끝납니다.
     def find_journal_log(self):
@@ -435,6 +447,34 @@ class ExTDirectoryEntry:
         return_text = return_text + "디렉토리 엔트리 파일 종류: {0},\t디렉토리 엔트리 파일 이름: {1},\t디렉토리 엔트리 전체 길이: {2},\t디렉토리 엔트리 전체 출력: {3}\n".format(self.file_extension, self.file_name, len(self.entry_content), self.entry_content)
 
         return return_text
+
+class ExTGroupDescriptor:
+    def __init__(self, bg_block_bitmap_lo, bg_inode_bitmap_lo, bg_inode_table_lo, bg_free_blocks_count_lo, bg_free_inodes_count_lo, bg_used_dirs_count_lo):
+        self.bg_block_bitmap_lo = bg_block_bitmap_lo
+        self.bg_inode_bitmap_lo = bg_inode_bitmap_lo
+        self.bg_inode_table_lo = bg_inode_table_lo
+        self.bg_free_blocks_count_lo = bg_free_blocks_count_lo
+        self.bg_free_inodes_count_lo = bg_free_inodes_count_lo
+        self.bg_used_dirs_count_lo = bg_used_dirs_count_lo
+
+    def print_group_descriptor(self):
+        return_text = ''
+        return_text = return_text + "그룹 디스크립터 블록 비트맵 위치: {0},\ti-node 비트맵 위치: {1},\ti-node 테이블 위치: {2}\n".format(self.bg_block_bitmap_lo, self.bg_inode_bitmap_lo, self.bg_inode_table_lo)
+        return_text = return_text + "빈 블록 갯수: {0},\t비할당 i-node 갯수: {1},\t할당된 디렉토리 엔트리 갯수: {2}\n".format(self.bg_free_blocks_count_lo, self.bg_free_inodes_count_lo, self.bg_used_dirs_count_lo)
+
+        return return_text
+
+class ExTSuperBlock:
+    def __init__(self):
+        self.superblock_number = -1
+        self.superblock_content = []
+        self.superblock_offset = -1
+
+        self.group_descriptor_start = -1
+        self.group_descriptor_content_list = [[]]
+        self.group_descriptor_many = -1
+        self.group_descriptor_length = -1
+
 
 class SuperBlockCarver:
 

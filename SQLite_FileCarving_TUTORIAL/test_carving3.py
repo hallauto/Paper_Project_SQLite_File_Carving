@@ -28,4 +28,9 @@ print(ExTCarver.journal_carver.print_journal_logs())
 for journal_log in ExTCarver.journal_carver.journal_log_list:
     ExTCarver.journal_carver.find_sqlite_directory_entry(journal_log)
 print(ExTCarver.journal_carver.prints_whole_entry())
+for superblock_index in range(0,ExTCarver.superblock_many):
+    for group_descriptor_index in len(0,ExTCarver.group_descriptor_content_list[superblock_index]):
+        ExTCarver.parsing_group_descriptor(superblock_index,group_descriptor_index)
+
+print
 print('find is end')
