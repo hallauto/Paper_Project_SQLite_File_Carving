@@ -15,22 +15,24 @@ else:
     fileConnector = FileConnector.FileConnector(image_file,int(block_size))
 
 fileConnector.file_open(image_file)
+result_file = open(directory + r"\result.txt",'w')
 
 ExTCarver = EXTCarving(fileConnector)
 ExTCarver.journal_carver.find_journal_superblock()
 ExTCarver.journal_carver.parse_journal_superblock()
 ExTCarver.find_superblock()
-for index in range(len(ExTCarver.superblock_number_list)):
-    ExTCarver.parsing_super_block(index)
+for ext_super_block in ExTCarver.ExTSuperBlock_list:
+    ExTCarver.parsing_super_block(ext_super_block)
+result_file.write(ExTCarver.print_whole_super_block())
 ExTCarver.find_group_descriptor()
 ExTCarver.journal_carver.find_journal_log()
-print(ExTCarver.journal_carver.print_journal_logs())
+result_file.write(ExTCarver.journal_carver.print_journal_logs())
 for journal_log in ExTCarver.journal_carver.journal_log_list:
     ExTCarver.journal_carver.find_sqlite_directory_entry(journal_log)
-print(ExTCarver.journal_carver.prints_whole_entry())
-for superblock_index in range(0,ExTCarver.superblock_many):
-    for group_descriptor_index in len(0,ExTCarver.group_descriptor_content_list[superblock_index]):
-        ExTCarver.parsing_group_descriptor(superblock_index,group_descriptor_index)
+result_file.write(ExTCarver.journal_carver.prints_whole_entry())
+for ext_super_block in ExTCarver.ExTSuperBlock_list:
+    ExTCarver.parsing_group_descriptor(ext_super_block)
 
-print
+result_file.write(ExTCarver.print_whole_group_descriptor())
+
 print('find is end')
