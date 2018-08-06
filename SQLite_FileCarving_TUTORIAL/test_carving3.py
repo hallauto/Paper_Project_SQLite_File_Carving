@@ -17,22 +17,26 @@ else:
 fileConnector.file_open(image_file)
 result_file = open(directory + r"\result.txt",'w')
 
-ExTCarver = EXTCarving(fileConnector)
-ExTCarver.journal_carver.find_journal_superblock()
-ExTCarver.journal_carver.parse_journal_superblock()
-ExTCarver.find_superblock()
-for ext_super_block in ExTCarver.ExTSuperBlock_list:
-    ExTCarver.parsing_super_block(ext_super_block)
-result_file.write(ExTCarver.print_whole_super_block())
-ExTCarver.find_group_descriptor()
-ExTCarver.journal_carver.find_journal_log()
-result_file.write(ExTCarver.journal_carver.print_journal_logs())
-for journal_log in ExTCarver.journal_carver.journal_log_list:
-    ExTCarver.journal_carver.find_sqlite_directory_entry(journal_log)
-result_file.write(ExTCarver.journal_carver.prints_whole_entry())
-for ext_super_block in ExTCarver.ExTSuperBlock_list:
-    ExTCarver.parsing_group_descriptor(ext_super_block)
+ext_carver = EXTCarving(fileConnector)
+#EXT 저널을 먼저 확인합니다.
+ext_carver.journal_carver.find_journal_superblock()
+ext_carver.journal_carver.parse_journal_superblock()
+ext_carver.journal_carver.find_journal_log()
+result_file.write(ext_carver.journal_carver.print_journal_logs())
+for journal_log in ext_carver.journal_carver.journal_log_list:
+    ext_carver.journal_carver.find_sqlite_directory_entry(journal_log)
+result_file.write(ext_carver.journal_carver.prints_whole_entry())
 
-result_file.write(ExTCarver.print_whole_group_descriptor())
+#EXT 저널의 확인이 완료되었습니다. 이제 EXT 수퍼블록을 확인합니다.
+ext_carver.super_b_carver.find_superblock(ext_carver.journal_carver.journal_superblock_offset)
+for ext_super_block in ext_carver.super_b_carver.ExTSuperBlock_list:
+    ext_carver.super_b_carver.parsing_super_block(ext_super_block)
+result_file.write(ext_carver.super_b_carver.print_whole_super_block())
+ext_carver.super_b_carver.find_group_descriptor()
+for ext_super_block in ext_carver.super_b_carver.ExTSuperBlock_list:
+    ext_carver.super_b_carver.parsing_group_descriptor(ext_super_block)
 
+result_file.write(ext_carver.super_b_carver.print_whole_group_descriptor())
+
+file_carving = FileCarving(directory, fileConnector)
 print('find is end')

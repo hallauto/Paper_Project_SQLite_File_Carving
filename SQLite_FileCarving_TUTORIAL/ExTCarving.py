@@ -19,8 +19,8 @@ class EXTCarving:
     def __init__(self, file_connector : FileConnector=None):
         self.file_connector = file_connector
         self.journal_carver = ExTJournalCarving(file_connector)
-
         self.super_b_carver = SuperBlockCarver(file_connector)
+
         self.ExTSuperBlock_list = []
         self.superblock_many = 0
         self.superblock_number_list = []
@@ -28,116 +28,7 @@ class EXTCarving:
         self.superblock_former_offset = -1
         self.superblock_offset_list = []
 
-        self.group_descriptor_start = -1 
-        self.group_descriptor_content_list = [[[]]]
-        self.group_descriptor_many_list = []
-        self.group_descriptor_block_many_list = []
-        self.group_descriptor_inode_many_list = []
-        self.group_descriptor_length_list = []
-
-#SQLite카빙을 위해 저널 수퍼블록과 수퍼블록, 그룹 디스크립터 블록을 찾아서 리스트에 담는 함수입니다. 해당 정보들이 전부 모여야 SQLite 카빙이 가능합니다.
-
-
-#수퍼블록을 찾는 함수입니다. 이 함수가 작동하기 위해서는 먼저 저널 수퍼블록을 카빙해야합니다.
-    def find_superblock(self):
-        rblock = b'start'
-        self.file_connector.save_original_seek()
-        index = 0
-        while(len(rblock) > 1 and (self.file_connector.file.tell() < self.journal_carver.journal_superblock_offset)):  #super block은 저널 슈퍼 블록보다 전에 있습니다.
-            rblock = self.file_connector.block_file_read(index)
-            header_offset = rblock.find(self.EXT_SUPER_B_HEADER)
-            if (header_offset < 0):
-                index+=1
-                continue
-            tmp_ExtSuperBlock = ExTSuperBlock()
-            tmp_ExtSuperBlock.superblock_offset = self.file_connector.file.tell() - self.file_connector.block_size + header_offset - self.EXT_SUPER_B_HEADER_OFFSET
-            print(str(hex(self.file_connector.file.tell() - self.file_connector.block_size)) + " 헤더 오프셋 {0}({1})이 있습니다. 즉, 이 블록에 EXT4 슈퍼 블록이 존재합니다.".format(tmp_ExtSuperBlock.superblock_offset, hex(tmp_ExtSuperBlock.superblock_offset)))
-            tmp_ExtSuperBlock.superblock_number = math.floor(tmp_ExtSuperBlock.superblock_offset / self.file_connector.block_size)
-            tmp_ExtSuperBlock.superblock_content = rblock
-            self.fwrite_superblock(tmp_ExtSuperBlock.superblock_offset, tmp_ExtSuperBlock.superblock_content)
-            self.superblock_many += 1
-            index += 1
-
-            self.ExTSuperBlock_list.append(tmp_ExtSuperBlock)
-
-        self.file_connector.load_original_seek()
-
-#그룹 디스크립터를 찾는 함수입니다. 이 함수가 작동하기 위해서는 먼저 수퍼블록을 카빙해야합니다.
-    def find_group_descriptor(self):
-        super_block_index = 0
-        self.file_connector.save_original_seek()
-        for ext_super_block in self.ExTSuperBlock_list:
-            """
-            #파일 시스템의 수퍼블록은 0x400에 있습니다. 해당 수퍼블록의 400을 포함해서 4096바이트 후에 그룹 디스크립터 테이블이 존재합니다.
-            
-            if self.superblock_offset_list[super_block_index] <= 0x400:
-                self.file_connector.file.seek(self.superblock_offset_list[super_block_index] + 0xC00)
-            #저널링 된 수퍼블록은 위의 오프셋 계산과는 관련 없이 바로 다음 블록에 존재합니다.
-            else:
-                self.file_connector.file.seek(self.superblock_offset_list[super_block_index] + self.file_connector.block_size)
-
-            print(self.file_connector.file.tell())
-            content = self.file_connector.temp_file_read(self.file_connector.block_size)
-            """
-            content = self.file_connector.block_file_read(ext_super_block.superblock_number + 1)
-
-            t_len = ext_super_block.group_descriptor_length
-            ext_super_block.group_descriptor_content_list = [0 for i in range(0,ext_super_block.group_descriptor_many) ]
-            for group_descriptor_index in range(0,ext_super_block.group_descriptor_many):
-                ext_super_block.group_descriptor_content_list[group_descriptor_index] = content[group_descriptor_index * t_len: (group_descriptor_index + 1) * t_len]
-
-        self.file_connector.load_original_seek()
-
-
-#발견한 저널 수퍼블록과 수퍼블록, 그룹 디스크립터 블록을 파싱해서 필요한 데이터를 얻는 함수입니다.
-    def parsing_super_block(self, ext_super_block):
-        content = ext_super_block.superblock_content
-        offset = ext_super_block.superblock_offset % self.file_connector.block_size
-
-        ext_super_block.group_descriptor_many = math.ceil(int.from_bytes(content[offset + 0x4:offset + 0x8],'little') / int.from_bytes(content[offset + 0x20:offset + 0x24],'little'))
-        ext_super_block.group_descriptor_block_many = int.from_bytes(content[offset + 0x20:offset + 0x24],'little')
-        ext_super_block.group_descriptor_inode_many = int.from_bytes(content[offset + 0x28:offset + 0x2C],'little')
-        ext_super_block.group_descriptor_length = int.from_bytes(content[offset + 0xFE:offset + 0x100],'little')
-        print('group descriptor 개수? : {0}'.format(ext_super_block.group_descriptor_many))
-        print('group descriptor 하나당 블록 개수? : {0}'.format(hex(ext_super_block.group_descriptor_block_many)))
-        print('group descriptor 하나당 i노드 개수? : {0}'.format(hex(ext_super_block.group_descriptor_inode_many)))
-        print('group descriptor 길이? : {0}'.format(ext_super_block.group_descriptor_length))
-
-#발견한 그룹 디스크립터 내용을 파싱합니다.
-    def parsing_group_descriptor(self, ext_superblock):
-        for group_descriptor_content in ext_superblock.group_descriptor_content_list:
-            content = group_descriptor_content
-            bg_block_bitmap_lo = int.from_bytes(content[0:4], 'little')
-            bg_inode_bitmap_lo = int.from_bytes(content[4:8], 'little')
-            bg_inode_table_lo = int.from_bytes(content[8:0xC], 'little')
-            bg_free_blocks_count_lo = int.from_bytes(content[0xC:0xE], 'little')
-            bg_free_inodes_count_lo = int.from_bytes(content[0xE:0x10], 'little')
-            bg_used_dirs_count_lo = int.from_bytes(content[0x10:0x12], 'little')
-
-            tmp_ExTGroupDescriptor = ExTGroupDescriptor(len(ext_superblock.ExTGroupDescriptor_list), bg_block_bitmap_lo, bg_inode_bitmap_lo, bg_inode_table_lo, bg_free_blocks_count_lo, bg_free_inodes_count_lo, bg_used_dirs_count_lo)
-            ext_superblock.ExTGroupDescriptor_list.append(tmp_ExTGroupDescriptor)
-
-    def print_whole_super_block(self):
-        return_text = ''
-        for ext_super_block in self.ExTSuperBlock_list:
-            return_text = return_text + ext_super_block.print_superblock()
-
-        return return_text
-
-    def print_whole_group_descriptor(self):
-        return_text = ''
-        for ext_superblock in self.ExTSuperBlock_list:
-            for group_descriptor in ext_superblock.ExTGroupDescriptor_list:
-                return_text = return_text + group_descriptor.print_group_descriptor()
-
-        return return_text
-
-#수퍼블록과 저널 수퍼블록을 파일로 출력시키는 함수입니다.
-    def fwrite_superblock(self, superblock_offset, superblock_content):
-        writefile = open(r'F:\Android_x86_image\4월15일\carved\super_block_offset_{0}'.format(superblock_offset),'wb')
-        writefile.write(bytes(superblock_content))
-        writefile.close()
-
+#SQLite카빙을 위해 저널 수퍼블록과 수퍼블록, 그룹 디스크립터 블록을 찾아야 합니다. 해당 정보들이 전부 모여야 SQLite 카빙이 가능합니다.
 
 class ExTJournalCarving:
 
@@ -336,7 +227,7 @@ class ExTJournalCarving:
                 db_file_name_length = int.from_bytes(data_block[db_name_start - 2: db_name_start - 1], 'little')
                 db_entry_length = int.from_bytes(data_block[db_name_start - 4: db_name_start - 2], 'little')
                 db_i_node_number = int.from_bytes(data_block[db_name_start - 8: db_name_start - 4], 'little')
-                db_entry_content = data_block[db_name_start - 9: db_name_start - 9 + db_entry_length - 1]
+                db_entry_content = data_block[db_name_start - 8: db_name_start - 8 + db_entry_length - 1]
                 db_file_name = data_block[db_name_start:db_name_offset]
                 db_file_name = db_file_name + b'.db'
 
@@ -435,6 +326,7 @@ class ExTJournalLog:
 class ExTDirectoryEntry:
     def __init__(self, i_node_number, entry_length, file_name_length, file_name, entry_content):
         self.file_name = file_name
+        self.file_name_without_extension = self.file_name.partition(b'.')[1]
         self.file_extension = self.file_name.partition(b'.')[-1]
         self.file_name_length = file_name_length
         self.i_node_number = i_node_number
@@ -448,6 +340,132 @@ class ExTDirectoryEntry:
         return_text = return_text + "디렉토리 엔트리 파일 종류: {0},\t디렉토리 엔트리 파일 이름: {1},\t디렉토리 엔트리 전체 길이: {2},\t디렉토리 엔트리 전체 출력: {3}\n".format(self.file_extension, self.file_name, hex(len(self.entry_content)), self.entry_content)
 
         return return_text
+
+
+class SuperBlockCarver:
+
+    EXT_SUPER_B_HEADER = b'\x53\xEF\x01\x00'
+    EXT_SUPER_B_HEADER_OFFSET = 56
+
+    def __init__(self, file_connector : FileConnector=None):
+        self.file_connector = file_connector
+
+        self.ExTSuperBlock_list = []
+        self.superblock_many = 0
+
+        self.group_descriptor_start = -1
+        self.group_descriptor_list = []
+        self.group_descriptor_many = -1
+        self.group_descriptor_block_many = -1
+        self.group_descriptor_inode_many = -1
+        self.group_descriptor_length = -1
+
+    # 수퍼블록을 찾는 함수입니다. 이 함수가 작동하기 위해서는 먼저 저널 수퍼블록을 카빙해야합니다.
+    def find_superblock(self, journal_superblock_offset):
+        rblock = b'start'
+        self.file_connector.save_original_seek()
+        index = 0
+        while (len(rblock) > 1 and (
+                self.file_connector.file.tell() < journal_superblock_offset)):  # super block은 저널 슈퍼 블록보다 전에 있습니다.
+            rblock = self.file_connector.block_file_read(index)
+            header_offset = rblock.find(self.EXT_SUPER_B_HEADER)
+            if (header_offset < 0):
+                index += 1
+                continue
+            tmp_ExtSuperBlock = ExTSuperBlock()
+            tmp_ExtSuperBlock.superblock_offset = self.file_connector.file.tell() - self.file_connector.block_size + header_offset - self.EXT_SUPER_B_HEADER_OFFSET
+            print(str(hex(
+                self.file_connector.file.tell() - self.file_connector.block_size)) + " 헤더 오프셋 {0}({1})이 있습니다. 즉, 이 블록에 EXT4 슈퍼 블록이 존재합니다.".format(
+                tmp_ExtSuperBlock.superblock_offset, hex(tmp_ExtSuperBlock.superblock_offset)))
+            tmp_ExtSuperBlock.superblock_number = math.floor(
+                tmp_ExtSuperBlock.superblock_offset / self.file_connector.block_size)
+            tmp_ExtSuperBlock.superblock_content = rblock
+            self.superblock_many += 1
+            index += 1
+
+            self.ExTSuperBlock_list.append(tmp_ExtSuperBlock)
+
+        self.file_connector.load_original_seek()
+
+    # 그룹 디스크립터를 찾는 함수입니다. 이 함수가 작동하기 위해서는 먼저 수퍼블록을 카빙해야합니다.
+    def find_group_descriptor(self):
+        super_block_index = 0
+        self.file_connector.save_original_seek()
+        for ext_super_block in self.ExTSuperBlock_list:
+            """
+            #파일 시스템의 수퍼블록은 0x400에 있습니다. 해당 수퍼블록의 400을 포함해서 4096바이트 후에 그룹 디스크립터 테이블이 존재합니다.
+
+            if self.superblock_offset_list[super_block_index] <= 0x400:
+                self.file_connector.file.seek(self.superblock_offset_list[super_block_index] + 0xC00)
+            #저널링 된 수퍼블록은 위의 오프셋 계산과는 관련 없이 바로 다음 블록에 존재합니다.
+            else:
+                self.file_connector.file.seek(self.superblock_offset_list[super_block_index] + self.file_connector.block_size)
+
+            print(self.file_connector.file.tell())
+            content = self.file_connector.temp_file_read(self.file_connector.block_size)
+            """
+            content = self.file_connector.block_file_read(ext_super_block.superblock_number + 1)
+
+            t_len = ext_super_block.group_descriptor_length
+            ext_super_block.group_descriptor_content_list = [0 for i in range(0, ext_super_block.group_descriptor_many)]
+            for group_descriptor_index in range(0, ext_super_block.group_descriptor_many):
+                ext_super_block.group_descriptor_content_list[group_descriptor_index] = content[
+                                                                                        group_descriptor_index * t_len: (
+                                                                                                                                    group_descriptor_index + 1) * t_len]
+
+        self.file_connector.load_original_seek()
+
+    # 발견한 저널 수퍼블록과 수퍼블록, 그룹 디스크립터 블록을 파싱해서 필요한 데이터를 얻는 함수입니다.
+    def parsing_super_block(self, ext_super_block):
+        content = ext_super_block.superblock_content
+        offset = ext_super_block.superblock_offset % self.file_connector.block_size
+
+        ext_super_block.group_descriptor_many = math.ceil(
+            int.from_bytes(content[offset + 0x4:offset + 0x8], 'little') / int.from_bytes(
+                content[offset + 0x20:offset + 0x24], 'little'))
+        ext_super_block.group_descriptor_block_many = int.from_bytes(content[offset + 0x20:offset + 0x24], 'little')
+        ext_super_block.group_descriptor_inode_many = int.from_bytes(content[offset + 0x28:offset + 0x2C], 'little')
+        ext_super_block.group_descriptor_length = int.from_bytes(content[offset + 0xFE:offset + 0x100], 'little')
+        #통상적으로, 안드로이드에서 내부메모리의 파일시스템의 설정을 바꾸는 경우는 거의 없습니다. 이를 감안해서 첫번째 수퍼블록에서 얻은 설정값을 기본 설정값이라 가정합니다.
+        self.group_descriptor_block_many = ext_super_block.group_descriptor_block_many
+        self.group_descriptor_inode_many = ext_super_block.group_descriptor_inode_many
+        self.group_descriptor_length = ext_super_block.group_descriptor_length
+        print('group descriptor 개수? : {0}'.format(ext_super_block.group_descriptor_many))
+        print('group descriptor 하나당 블록 개수? : {0}'.format(hex(ext_super_block.group_descriptor_block_many)))
+        print('group descriptor 하나당 i노드 개수? : {0}'.format(hex(ext_super_block.group_descriptor_inode_many)))
+        print('group descriptor 길이? : {0}'.format(ext_super_block.group_descriptor_length))
+
+    # 발견한 그룹 디스크립터 내용을 파싱합니다.
+    def parsing_group_descriptor(self, ext_superblock):
+        for group_descriptor_content in ext_superblock.group_descriptor_content_list:
+            content = group_descriptor_content
+            bg_block_bitmap_lo = int.from_bytes(content[0:4], 'little')
+            bg_inode_bitmap_lo = int.from_bytes(content[4:8], 'little')
+            bg_inode_table_lo = int.from_bytes(content[8:0xC], 'little')
+            bg_free_blocks_count_lo = int.from_bytes(content[0xC:0xE], 'little')
+            bg_free_inodes_count_lo = int.from_bytes(content[0xE:0x10], 'little')
+            bg_used_dirs_count_lo = int.from_bytes(content[0x10:0x12], 'little')
+
+            tmp_ExTGroupDescriptor = ExTGroupDescriptor(len(ext_superblock.ExTGroupDescriptor_list), bg_block_bitmap_lo,
+                                                        bg_inode_bitmap_lo, bg_inode_table_lo, bg_free_blocks_count_lo,
+                                                        bg_free_inodes_count_lo, bg_used_dirs_count_lo)
+            ext_superblock.ExTGroupDescriptor_list.append(tmp_ExTGroupDescriptor)
+
+    def print_whole_super_block(self):
+        return_text = ''
+        for ext_super_block in self.ExTSuperBlock_list:
+            return_text = return_text + ext_super_block.print_superblock()
+
+        return return_text
+
+    def print_whole_group_descriptor(self):
+        return_text = ''
+        for ext_superblock in self.ExTSuperBlock_list:
+            for group_descriptor in ext_superblock.ExTGroupDescriptor_list:
+                return_text = return_text + group_descriptor.print_group_descriptor()
+
+        return return_text
+
 
 class ExTSuperBlock:
     def __init__(self):
@@ -488,19 +506,3 @@ class ExTGroupDescriptor:
         return_text = return_text + "빈 블록 갯수: {0},\t비할당 i-node 갯수: {1},\t할당된 디렉토리 엔트리 갯수: {2}\n".format(hex(self.bg_free_blocks_count_lo), hex(self.bg_free_inodes_count_lo), self.bg_used_dirs_count_lo)
 
         return return_text
-
-class SuperBlockCarver:
-
-    def __init__(self, file_connector : FileConnector=None):
-        self.file_connetor = file_connector
-        self.superblock_offset = -1 
-        self.superblock_content = [] 
-        self.group_descriptor_start = -1 
-        self.group_descriptor_list = [] 
-        self.group_descriptor_many = -1 
-        self.group_descriptor_length_list = [] 
-        self.group_descriptor_length = -1 
-
-
-
-
