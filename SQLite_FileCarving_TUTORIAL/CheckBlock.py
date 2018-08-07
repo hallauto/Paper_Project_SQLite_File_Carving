@@ -31,8 +31,14 @@ class CheckBlock:
         self.entry_exist_group_list = []
         self.db_journal_tuple_list = []
 
+        self.group_entry_list = []
+        for group_number in len(self.ext_sb_carver.group_descriptor_many):
+            tmp_group_entry = GroupEntry(group_number)
+            self.group_entry_list.append(tmp_group_entry)
+
         self.group_db_many_list = []
         self.group_journal_many_list = []
+        self.group_entry_many_list = []
 
 #db와 db-journal 파일을 매칭 시키는 함수입니다. 이 함수는 sqlite3에 따라 각 db, db-journal의 이름이 같으면 매칭 시킵니다.
     def make_db_journal_tuple_list(self):
@@ -116,5 +122,81 @@ class CheckBlock:
 
         self.entry_exist_group_list = OrderedDict.fromkeys(self.entry_exist_group_list)
 
+    def make_group_many_list(self):
+        for db_entry in self.db_entry_list:
+            self.group_db_many_list[db_entry] += 1
+        for journal_entry in self.journal_entry_list:
+            self.group_journal_many_list[journal_entry] += 1
 
+    def make_group_entry_list(self):
+        for db_entry in self.db_entry_list:
+            self.group_entry_list[db_entry.group_descriptor_number].db_entry_list.append(db_entry)
+            self.group_entry_list[db_entry.group_descriptor_number].whole_entry_list.append(db_entry)
+
+        for db_entry in self.db_entry_list:
+            self.group_entry_list[db_entry.group_descriptor_number].db_entry_list.append(db_entry)
+
+
+class GroupEntry:
+    def __init__(self, group_number, db_entry_list = [], journal_entry_list = []):
+        self.group_number = group_number
+        self.db_entry_list = db_entry_list
+        self.journal_entry_list = journal_entry_list
+        self.whole_entry_list = db_entry_list + journal_entry_list
+
+        self.db_entry_many = len(db_entry_list)
+        self.journal_entry_many = len(journal_entry_list)
+        self.whole_entry_many = self.db_entry_many + self.journal_entry_many
+
+        self.least_db_entry_list = []
+        self.least_journal_entry_list = []
+        checked_file_name_list = []
+        for db_entry in self.db_entry_list.reverse():  # 가장 최근에 변경된 내역을 담은 저널로그가 가장 근접한 정보를 가지리라는 판단하에 저널 로그를 역순으로 탐색합니다.
+            # 저널로그에는 다수의 엔트리가 존재하며, 하나의 파일에 여러 디렉토리 엔트리가 저널로그에 존재할 수 있습니다. 이러한 중복은 db, db-journal에서는 무시해도 좋습니다.
+            if db_entry.file_name in checked_file_name_list:
+                continue
+            self.least_db_entry_list = db_entry
+        for journal_entry in self.journal_entry_list.reverse():
+            if journal_entry.file_name in checked_file_name_list:
+                continue
+            self.least_journal_entry_list = journal_entry
+
+    def sorting_whole_entry_inode(self):
+        inode_list = []
+        sorted_list = [0 for entry in self.whole_entry_list]
+        for entry in self.whole_entry_list:
+            inode_list.append(entry.i_node_number)
+
+        inode_list.sort()
+
+        for entry in self.whole_entry_list:
+            sorted_list[inode_list.index(entry.i_node_number)] = entry
+
+        self.whole_entry_list = sorted_list
+
+    def sorting_db_entry_inode(self):
+        inode_list = []
+        sorted_list = [0 for entry in self.db_entry_list]
+        for entry in self.db_entry_list:
+            inode_list.append(entry.i_node_number)
+
+        inode_list.sort()
+
+        for entry in self.db_entry_list:
+            sorted_list[inode_list.index(entry.i_node_number)] = entry
+
+        self.db_entry_list = sorted_list
+
+    def sorting_journal_entry_inode(self):
+        inode_list = []
+        sorted_list = [0 for entry in self.journal_entry_list]
+        for entry in self.journal_entry_list:
+            inode_list.append(entry.i_node_number)
+
+        inode_list.sort()
+
+        for entry in self.journal_entry_list:
+            sorted_list[inode_list.index(entry.i_node_number)] = entry
+
+        self.journal_entry_list = sorted_list
 

@@ -80,6 +80,8 @@ class FileCarving:
         self.checkBlock.make_journal_exist_group_list()
         self.checkBlock.make_db_journal_tuple_list()
         self.checkBlock.make_entry_group_tuple_list()
+        self.checkBlock.make_entry_exist_group_list()
+        self.checkBlock.make_group_many_list()
 
         self.CHECKBLOCK_FLAG = True
 
@@ -144,13 +146,14 @@ class FileCarving:
             print("There is no Transation Journal")
             return False
 
-        for group in self.checkBlock.db_exist_group_list:
-            self.report_file.write("블록 그룹 {0}내 db 엔트리 존재\n".format(group))
-            self.journaled_block_numbers = self.journaled_block_numbers + range(group * self.extCarver.super_b_carver.group_descriptor_block_many, (group + 1) * self.extCarver.super_b_carver.group_descriptor_block_many)
+        for groupEntry in self.checkBlock.group_entry_list:
+            self.report_file.write("블록 그룹 {0}내 db 엔트리 존재\n".format(groupEntry.group_number))
+            block_number_list = range(groupEntry.group_number * self.extCarver.super_b_carver.group_descriptor_block_many, (groupEntry.group_number + 1) * self.extCarver.super_b_carver.group_descriptor_block_many)
+            for block_number in block_number_list:
+                block_data = self.fileConnector.block_file_read(block_number)
+                self.check_db_file_structure(block_data)
 
-        for group in self.checkBlock.journal_exist_group_list:
-            self.report_file.write("블록 그룹 {0}내 db-journal 엔트리 존재\n".format(group))
-            self.journaled_block_numbers = self.journaled_block_numbers + range(group * self.extCarver.super_b_carver.group_descriptor_block_many, (group + 1) * self.extCarver.super_b_carver.group_descriptor_block_many)
+
 
 
 
