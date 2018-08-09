@@ -20,7 +20,10 @@ class FileCarving:
         self.destdir = destdir
         self.fileConnector = fileConnector
         self.result_fileConnector = result_fileConnector
+        self.journaled_file_many = 0
+        self.unjournaled_file_many = 0
         self.file_many = 0
+        self.whole_file_many = 0
         self.journal_concerned_file = 0
         self.head_offsets = []  # 카빙해야할 파일들의 head가 시작되는 offset입니다.
         self.page_sizes = []  # 카빙해야할 SQLite 파일들의 page size 입니다.
@@ -32,7 +35,7 @@ class FileCarving:
 
 
         self.extCarver = ExTCarving.EXTCarving(fileConnector) #EXT4저널과 관련된 정보는 전부 ExT Carver에 있습니다.
-        self.checkBlock = CheckBlock.CheckBlock(self.extCarver)
+        self.checkBlock = None
         #각각의 단계가 정상적으로 진행되었는지 검사하기위해 있는 값입니다.
         self.EXTCARVING_FLAG = False
         self.CHECKBLOCK_FLAG = False
@@ -75,13 +78,13 @@ class FileCarving:
 
     def check_journaled_block(self):
         if self.checkBlock is None:
-            return False
+            self.checkBlock = CheckBlock.CheckBlock(self.extCarver)
         self.checkBlock.make_db_exist_group_list()
         self.checkBlock.make_journal_exist_group_list()
         self.checkBlock.make_db_journal_tuple_list()
-        self.checkBlock.make_entry_group_tuple_list()
         self.checkBlock.make_entry_exist_group_list()
         self.checkBlock.make_group_many_list()
+        self.checkBlock.make_group_entry_list()
 
         self.CHECKBLOCK_FLAG = True
 
@@ -104,7 +107,7 @@ class FileCarving:
         :return:
         """
 
-        print("{0}번 블록 검사중".format(block_location))
+        #print("{0}번 블록 검사중".format(block_location))
 
         self.current_block_number = block_location
 
@@ -121,10 +124,13 @@ class FileCarving:
             self.current_block_number = self.investigate_block_numbers[0]
             self.carving_block(self.current_block_number)
 
+        self.unjournaled_file_many = self.file_many
+        self.whole_file_many = self.journaled_file_many + self.unjournaled_file_many
+        self.report_file.write("SQLite 저널이 없는 {0}개의 블록 중 파일이 존재하는 블록은 {1}개\n".format(self.max_block_number - len(self.checkBlock.entry_exist_group_list), self.unjournaled_file_many))
+        self.report_file.write("총 {0}개의 SQLite 파일 중 저널된 파일은 {1}개, 저널되지 않은 파일은 {2}개\n".format(self.whole_file_many, self.journaled_file_many, self.unjournaled_file_many))
         for index in list(range(0,self.file_many)):
             self.make_file(index)
 
-        self.report_file.write("저널과 무관한 {0}블록 중 파일이 존재하는 블록은 {1}개\n".format(self.max_block_number - len(self.journal_parser.journal_results), self.file_many))
 
     def carving_whole_file(self):
         """
@@ -138,20 +144,38 @@ class FileCarving:
         self.carving_rest_file()
 
     def carving_journaled_block(self):
-        if self.jour:
-            print("Please set Journal Parser first.")
-            return False
-
-        if self.journal_parser.transaction_number < 1:
-            print("There is no Transation Journal")
-            return False
-
         for groupEntry in self.checkBlock.group_entry_list:
+            if groupEntry.whole_entry_many <= 0:
+                continue
+            print("{0}번 그룹 검사중".format(groupEntry.group_number))
             self.report_file.write("블록 그룹 {0}내 db 엔트리 존재\n".format(groupEntry.group_number))
             block_number_list = range(groupEntry.group_number * self.extCarver.super_b_carver.group_descriptor_block_many, (groupEntry.group_number + 1) * self.extCarver.super_b_carver.group_descriptor_block_many)
             for block_number in block_number_list:
-                block_data = self.fileConnector.block_file_read(block_number)
-                self.check_db_file_structure(block_data)
+                self.carving_block(block_number)
+                self.investigate_block_numbers.remove(block_number)
+
+            #해당 블록 그룹의 블록을 전부 카빙했습니다. 발견된 파일들에 존재하던 엔트리의 이름을 붙입니다. 파일명 규칙: group_(그룹 번호)_(엔트리의 파일명).(확장자)
+            db_entry_index = 0
+            journal_entry_index = 0
+            for index in range(0,self.file_many):
+                file_name = "group_{0}_".format(groupEntry.group_number)
+                if self.file_type[index] == self.SQLite_DB and db_entry_index < len(groupEntry.least_db_entry_list):
+                    if type(file_name + groupEntry.least_db_entry_list[db_entry_index].file_name_without_extension) is int:
+                        print(groupEntry.least_db_entry_list[db_entry_index].file_name_without_extension)
+                    file_name = file_name + groupEntry.least_db_entry_list[db_entry_index].file_name_without_extension
+                    db_entry_index += 1
+                if self.file_type[index] == self.SQLite_JOURNAL and journal_entry_index < len(groupEntry.least_journal_entry_list):
+                    if type(file_name + groupEntry.least_journal_entry_list[journal_entry_index].file_name_without_extension) is int:
+                        print(groupEntry.least_journal_entry_list[db_entry_index].file_name_without_extension)
+                    file_name = file_name + groupEntry.least_journal_entry_list[journal_entry_index].file_name_without_extension
+                    journal_entry_index += 1
+
+                self.make_file(index,file_name)
+
+
+        self.journaled_file_many = self.file_many
+        self.file_many = 0
+
 
 
 
@@ -173,7 +197,7 @@ class FileCarving:
         if len(self.page_sizes) != len(self.head_offsets):
             return False
 
-        file_name += "file_number {0} carved_{1}.db".format(index, self.head_offsets[index])
+        file_name += "file_number_{0}_carved_{1}.db".format(index, self.head_offsets[index])
 
         page_per_block = abs(self.page_sizes[index] / self.fileConnector.block_size)
 

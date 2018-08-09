@@ -1,6 +1,7 @@
 import FileCarving
 import FileConnector
 from ExTCarving import EXTCarving, ExTJournalCarving
+from CheckBlock import CheckBlock
 
 image_file = r"F:\Android_x86_image\4월15일\sda1.dd"
 print("Inputed image file. {0}".format(image_file))
@@ -38,5 +39,14 @@ for ext_super_block in ext_carver.super_b_carver.ExTSuperBlock_list:
 
 result_file.write(ext_carver.super_b_carver.print_whole_group_descriptor())
 
-file_carving = FileCarving(directory, fileConnector)
+checkBlock = CheckBlock(ext_carver)
+
+checkBlock.make_db_exist_group_list()
+checkBlock.make_journal_exist_group_list()
+checkBlock.make_db_journal_tuple_list()
+checkBlock.make_entry_exist_group_list()
+checkBlock.make_group_many_list()
+
+print(checkBlock.entry_exist_group_list)
+
 print('find is end')

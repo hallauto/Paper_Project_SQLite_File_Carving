@@ -326,8 +326,12 @@ class ExTJournalLog:
 class ExTDirectoryEntry:
     def __init__(self, i_node_number, entry_length, file_name_length, file_name, entry_content):
         self.file_name = file_name
-        self.file_name_without_extension = self.file_name.partition(b'.')[1]
+        self.file_name_without_extension = self.file_name.partition(b'.')[0]
+        self.file_name_without_extension = str(self.file_name_without_extension)
+        self.file_name_without_extension = self.file_name_without_extension[2:]
         self.file_extension = self.file_name.partition(b'.')[-1]
+        self.file_extension = str(self.file_extension)
+        self.file_extension = self.file_extension[2:]
         self.file_name_length = file_name_length
         self.i_node_number = i_node_number
         self.entry_length = entry_length
@@ -409,9 +413,7 @@ class SuperBlockCarver:
             t_len = ext_super_block.group_descriptor_length
             ext_super_block.group_descriptor_content_list = [0 for i in range(0, ext_super_block.group_descriptor_many)]
             for group_descriptor_index in range(0, ext_super_block.group_descriptor_many):
-                ext_super_block.group_descriptor_content_list[group_descriptor_index] = content[
-                                                                                        group_descriptor_index * t_len: (
-                                                                                                                                    group_descriptor_index + 1) * t_len]
+                ext_super_block.group_descriptor_content_list[group_descriptor_index] = content[group_descriptor_index * t_len: (group_descriptor_index + 1) * t_len]
 
         self.file_connector.load_original_seek()
 
@@ -420,13 +422,12 @@ class SuperBlockCarver:
         content = ext_super_block.superblock_content
         offset = ext_super_block.superblock_offset % self.file_connector.block_size
 
-        ext_super_block.group_descriptor_many = math.ceil(
-            int.from_bytes(content[offset + 0x4:offset + 0x8], 'little') / int.from_bytes(
-                content[offset + 0x20:offset + 0x24], 'little'))
+        ext_super_block.group_descriptor_many = math.ceil(int.from_bytes(content[offset + 0x4:offset + 0x8], 'little') / int.from_bytes(content[offset + 0x20:offset + 0x24], 'little'))
         ext_super_block.group_descriptor_block_many = int.from_bytes(content[offset + 0x20:offset + 0x24], 'little')
         ext_super_block.group_descriptor_inode_many = int.from_bytes(content[offset + 0x28:offset + 0x2C], 'little')
         ext_super_block.group_descriptor_length = int.from_bytes(content[offset + 0xFE:offset + 0x100], 'little')
         #통상적으로, 안드로이드에서 내부메모리의 파일시스템의 설정을 바꾸는 경우는 거의 없습니다. 이를 감안해서 첫번째 수퍼블록에서 얻은 설정값을 기본 설정값이라 가정합니다.
+        self.group_descriptor_many = ext_super_block.group_descriptor_many
         self.group_descriptor_block_many = ext_super_block.group_descriptor_block_many
         self.group_descriptor_inode_many = ext_super_block.group_descriptor_inode_many
         self.group_descriptor_length = ext_super_block.group_descriptor_length
