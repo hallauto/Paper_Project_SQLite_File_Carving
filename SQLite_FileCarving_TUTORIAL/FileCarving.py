@@ -27,6 +27,7 @@ class FileCarving:
         self.journal_concerned_file = 0
         self.head_offsets = []  # 카빙해야할 파일들의 head가 시작되는 offset입니다.
         self.page_sizes = []  # 카빙해야할 SQLite 파일들의 page size 입니다.
+        self.page_manys = [] #카빙해야할 SQLite 파일들의 페이지 개수입니다.
         self.sector_sizes = []  # 카빙해야할 SQLite 저널 파일들이 알려주는 sector size 입니다. 저널파일은 이 크기만큼 헤더가 존재하고 그 이후에 페이지가 시작됩니다. db 파일은 해당 사이즈를 이용하지 않으며, 따라서 -1로 값을 넣습니다.
         self.file_type = []  # 카빙해야할 SQLite 파일 타입을 알려주는 값입니다.
         self.max_block_number = int(math.ceil(self.fileConnector.file_size / self.fileConnector.block_size))  # 현재 분석중인 이미지 파일의 최대 블록 번호입니다.
@@ -40,7 +41,7 @@ class FileCarving:
         self.EXTCARVING_FLAG = False
         self.CHECKBLOCK_FLAG = False
 
-        self.report_file = open(self.destdir + r"\reprot.txt","w")
+        self.report_file = open(self.destdir + r"report.txt","w")
 
     def config_journal(self, new_file_Connector):
         self.journal_parser = JournalParser(new_file_Connector.file)
@@ -113,7 +114,10 @@ class FileCarving:
 
         block_data = self.fileConnector.block_file_read(block_location)  # 검사할 블록을 읽습니다.
         self.investigate_block_numbers.remove(block_location) #곧 검사할 블록을 검사할 블록 리스트에서 제거합니다.
-        if self.check_db_file_structure(block_data) or self.check_journal_file_structure(block_data):
+        if self.check_journal_file_structure(block_data):
+            return True
+
+        if self.check_db_file_structure(block_data):
             return True
         else:
             return False
@@ -152,7 +156,6 @@ class FileCarving:
             block_number_list = range(groupEntry.group_number * self.extCarver.super_b_carver.group_descriptor_block_many, (groupEntry.group_number + 1) * self.extCarver.super_b_carver.group_descriptor_block_many)
             for block_number in block_number_list:
                 self.carving_block(block_number)
-                self.investigate_block_numbers.remove(block_number)
 
             #해당 블록 그룹의 블록을 전부 카빙했습니다. 발견된 파일들에 존재하던 엔트리의 이름을 붙입니다. 파일명 규칙: group_(그룹 번호)_(엔트리의 파일명).(확장자)
             db_entry_index = 0
@@ -197,31 +200,38 @@ class FileCarving:
         if len(self.page_sizes) != len(self.head_offsets):
             return False
 
-        file_name += "file_number_{0}_carved_{1}.db".format(index, self.head_offsets[index])
+        file_name = "file_number_{0}_carved_{1}_".format(index, self.head_offsets[index]) + file_name
+
 
         page_per_block = abs(self.page_sizes[index] / self.fileConnector.block_size)
 
         self.fileConnector.file.seek(self.head_offsets[index], 0)
         # 먼저 저널 파일을 카빙하는지, DB 파일을 카빙하는지 검사합니다.
         if self.file_type[index] == self.SQLite_DB:
-            sql_file_data = self.fileConnector.file.read(self.page_sizes[index])  # 먼저 헤더 부분과 첫번째 페이지를 읽습니다. 이후에 추가 페이지가 존재하는지 검사해야합니다.
-            # 추가 페이지들은 트리구조로 이어집니다. 따라서, 이들 페이지만의 페이지 헤더가 존재하면 파일이 이어진다고 볼 수 있습니다.
-            leap_page_data = "start"  # 첫 루프가 무조건 실행되기위한 임시 값입니다.
-            while len(leap_page_data) > 1:
-                leap_page_data = self.fileConnector.file.read(self.page_sizes[index])
-                if ((leap_page_data[0] != '\x00') and (leap_page_data[0] != '\x0D') and (
+            file_name += ".db"
+
+            #sqlite 버전에 따라 파일의 크기가 헤더에 적히는 경우가 있고 아닌 경우가 있습니다. 이를 구분해서 카빙합니다.
+            if self.page_manys[index] > 0:
+                sql_file_data = self.fileConnector.file.read(self.page_sizes[index] * self.page_manys[index])
+            else:
+                sql_file_data = self.fileConnector.file.read(self.page_sizes[index])  # 먼저 헤더 부분과 첫번째 페이지를 읽습니다. 이후에 추가 페이지가 존재하는지 검사해야합니다.
+                # 추가 페이지들은 트리구조로 이어집니다. 따라서, 이들 페이지만의 페이지 헤더가 존재하면 파일이 이어진다고 볼 수 있습니다.
+                leap_page_data = "start"  # 첫 루프가 무조건 실행되기위한 임시 값입니다.
+                while len(leap_page_data) > 1:
+                    leap_page_data = self.fileConnector.file.read(self.page_sizes[index])
+                    if ((leap_page_data[0] != '\x00') and (leap_page_data[0] != '\x0D') and (
                         leap_page_data[0] != '\x0A') and (
                         leap_page_data[0] != '\x05') and (
                         leap_page_data[0] != '\x02')):
-                    break
-                if ((ord(leap_page_data[1]) * 256 + ord(leap_page_data[2]) > self.page_sizes[index]) or (
+                        break
+                    if ((ord(leap_page_data[1]) * 256 + ord(leap_page_data[2]) > self.page_sizes[index]) or (
                         ord(leap_page_data[5]) * 256 + ord(leap_page_data[6]) > self.page_sizes[index])):
-                    break
-                sql_file_data += leap_page_data
+                        break
+                    sql_file_data += leap_page_data
 
         # 저널 파일 카빙입니다.
         if self.file_type[index] == self.SQLite_JOURNAL:
-            file_name = file_name + "-journal"
+            file_name = file_name + ".db-journal"
             if self.sector_sizes[index] == -1:
                 return False
             sql_file_data = self.fileConnector.file.read(self.sector_sizes[index] + self.page_sizes[index])
@@ -255,13 +265,21 @@ class FileCarving:
         # 헤더 오프셋에서 블록 사이즈 만큼 읽습니다. 유효한 데이터가 존재하는지 파악하기 위함입니다.
         check_data = self.fileConnector.temp_file_read(self.fileConnector.block_size)
 
+        # 추가로 시그니처 정보를 파악합니다.
+        # 먼저 SQLite 버전을 검사합니다. 현재 안드로이드에 채택된 SQLite는 전부 3.0 이상 4.0 미만의 버전입니다.
         sqlite_version = int(binascii.hexlify(check_data[96:100]),16)
         print("SQLite Version: " + str(sqlite_version))
-        if sqlite_version > 4000000 or sqlite_version < 3000000:  # 추가로 시그니처 정보를 파악합니다.
-            print(str(hex(self.fileConnector.file.tell() - self.fileConnector.block_size)) + "...그러나 파일은 없네요.")
+        if sqlite_version > 4000000 or sqlite_version < 3000000:
+            print(str(hex(self.fileConnector.file.tell() - self.fileConnector.block_size)) + "버전에 오류가 있습니다.")
+            return False
+        # 추가 데이터를 확인합니다. 해당 데이터들은 SQLite 문서에서 확정된 값입니다.
+        if check_data[21] != 64 and check_data[22] != 32 and check_data[23] != 32:
+            print(str(hex(self.fileConnector.file.tell() - self.fileConnector.block_size)) + "Signature가 다릅니다..")
             return False
 
+        #SQLite 3.7.0 버전 이상부터 db 파일 크기가 저장됩니다. 정확히는 db 파일을 이루는 페이지개수가 저장되며, 이를 토대로 파일을 카빙하는 것도 가능합니다.
         page_size = int(binascii.hexlify(check_data[16:18]),16)#(check_data[16] * 256 + check_data[17])
+        page_many = int(binascii.hexlify(check_data[28:32]),16)
         print("page size = " + str(page_size))
         if page_size <= -1:
             return False
@@ -269,6 +287,7 @@ class FileCarving:
         # 드디어 파일을 찾았습니다. 해당 파일의 Offset을 정리해서 변수에 저장합니다!
         self.head_offsets.append(head_offset)
         self.page_sizes.append(page_size)
+        self.page_manys.append(page_many)
         self.file_type.append(self.SQLite_DB)
         self.sector_sizes.append(-1)
         self.file_many += 1
@@ -289,15 +308,15 @@ class FileCarving:
         check_data = self.fileConnector.temp_file_read(self.fileConnector.block_size)
         try:
             page_count = int(binascii.hexlify(check_data[8:12]),16)
-            print("rblcok[8] : The number of pages in the next segment of the journal = " + str(page_count))
+            print("block_data[8] : The number of pages in the next segment of the journal = " + str(page_count))
             checksum = int(binascii.hexlify(check_data[12:16]),16)
-            print("rblcok[12] : A random nonce for the checksum = " + str(checksum))
+            print("block_data[12] : A random nonce for the checksum = " + str(checksum))
             initial_db_size = int(binascii.hexlify(check_data[16:20]),16)
-            print("rblcok[16] : Initial size of the database in pages = " + str(initial_db_size))
+            print("block_data[16] : Initial size of the database in pages = " + str(initial_db_size))
             sector_size = int(binascii.hexlify(check_data[20:24]),16)
-            print("rblcok[20] : Size of a disk sector assumed by the process that wrote this journal = " + str(sector_size))
+            print("block_data[20] : Size of a disk sector assumed by the process that wrote this journal = " + str(sector_size))
             page_size = int(binascii.hexlify(check_data[24:28]),16)
-            print("rblcok[24] : Size of pages in this journal = " + str(page_size))
+            print("block_data[24] : Size of pages in this journal = " + str(page_size))
 
         except ValueError:
             return False

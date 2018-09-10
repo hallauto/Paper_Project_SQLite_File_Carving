@@ -74,6 +74,8 @@ class ExTJournalCarving:
         valid_chars = bytearray(valid_chars,'ascii')
 
         if type(file_name) is int or len(file_name) is 1 :
+            if type(file_name) is list:
+                file_name = file_name[0]
             if file_name not in valid_chars:
                 return False
             else:
@@ -112,17 +114,28 @@ class ExTJournalCarving:
     def find_journal_log(self):
         journal_log_number = 0
         journal_log_exist = False
+        journal_block_flag = 0
 
         self.file_connector.save_original_seek()
 
 #저널 수퍼블록은 저널 로그와는 관련이 없으며, 저널 로그는 저널 수퍼 블록이 나온 이후에 발견됩니다. 단, 리보크 블록이 존재할 가능성도 있습니다.
         current_block_number = self.journal_superblock_number + 1
         content = self.file_connector.block_file_read(current_block_number)
-
         journal_block_flag = self.check_journal_block(content)
+        while journal_block_flag == 0:
+            if journal_block_flag is not self.EXT_J_DB_FLAG:
+                current_block_number += 1
+                content = self.file_connector.block_file_read(current_block_number)
+                journal_block_flag = self.check_journal_block(content)
 
-        while(journal_block_flag > 0):
-            if (journal_block_flag is self.EXT_J_DB_FLAG):
+        while journal_block_flag > 0:
+            if journal_block_flag is not self.EXT_J_DB_FLAG:
+                current_block_number += 1
+                content = self.file_connector.block_file_read(current_block_number)
+                journal_block_flag = self.check_journal_block(content)
+                continue
+
+            else:
                 temp_journal_log = ExTJournalLog(journal_log_number,self.journal_superblock_offset)
                 temp_journal_log.block_number_list.append(current_block_number)
                 temp_journal_log.descriptor_block_number = current_block_number
@@ -431,10 +444,7 @@ class SuperBlockCarver:
         self.group_descriptor_block_many = ext_super_block.group_descriptor_block_many
         self.group_descriptor_inode_many = ext_super_block.group_descriptor_inode_many
         self.group_descriptor_length = ext_super_block.group_descriptor_length
-        print('group descriptor 개수? : {0}'.format(ext_super_block.group_descriptor_many))
-        print('group descriptor 하나당 블록 개수? : {0}'.format(hex(ext_super_block.group_descriptor_block_many)))
-        print('group descriptor 하나당 i노드 개수? : {0}'.format(hex(ext_super_block.group_descriptor_inode_many)))
-        print('group descriptor 길이? : {0}'.format(ext_super_block.group_descriptor_length))
+        print(self.print_whole_super_block())
 
     # 발견한 그룹 디스크립터 내용을 파싱합니다.
     def parsing_group_descriptor(self, ext_superblock):

@@ -67,7 +67,7 @@ class CheckBlock:
         tmp_list = self.db_entry_list
         tmp_list.reverse()
         for db_entry in tmp_list:
-            group = db_entry.i_node_number / self.ext_carver.super_b_carver.group_descriptor_inode_many
+            group = math.floor(db_entry.i_node_number / self.ext_carver.super_b_carver.group_descriptor_inode_many)
             self.db_exist_group_list.append(group)
 
         self.db_exist_group_list = list(OrderedDict.fromkeys(self.db_exist_group_list))
