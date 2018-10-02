@@ -128,10 +128,11 @@ class FileCarving:
             self.current_block_number = self.investigate_block_numbers[0]
             self.carving_block(self.current_block_number)
 
-        self.unjournaled_file_many = self.file_many
-        self.whole_file_many = self.journaled_file_many + self.unjournaled_file_many
-        self.report_file.write("SQLite 저널이 없는 {0}개의 블록 중 파일이 존재하는 블록은 {1}개\n".format(self.max_block_number - len(self.checkBlock.entry_exist_group_list), self.unjournaled_file_many))
-        self.report_file.write("총 {0}개의 SQLite 파일 중 저널된 파일은 {1}개, 저널되지 않은 파일은 {2}개\n".format(self.whole_file_many, self.journaled_file_many, self.unjournaled_file_many))
+        if self.EXTCARVING_FLAG is True and self.CHECKBLOCK_FLAG is True:
+            self.unjournaled_file_many = self.file_many
+            self.whole_file_many = self.journaled_file_many + self.unjournaled_file_many
+            self.report_file.write("SQLite 저널이 없는 {0}개의 블록 중 파일이 존재하는 블록은 {1}개\n".format(self.max_block_number - len(self.checkBlock.entry_exist_group_list), self.unjournaled_file_many))
+            self.report_file.write("총 {0}개의 SQLite 파일 중 저널된 파일은 {1}개, 저널되지 않은 파일은 {2}개\n".format(self.whole_file_many, self.journaled_file_many, self.unjournaled_file_many))
         for index in list(range(0,self.file_many)):
             self.make_file(index)
 
@@ -148,11 +149,13 @@ class FileCarving:
         self.carving_rest_file()
 
     def carving_journaled_block(self):
+        print("엔트리가 존재하는 그룹은 {0}개".format(len(self.checkBlock.entry_exist_group_list)))
         for groupEntry in self.checkBlock.group_entry_list:
             if groupEntry.whole_entry_many <= 0:
                 continue
             print("{0}번 그룹 검사중".format(groupEntry.group_number))
             self.report_file.write("블록 그룹 {0}내 db 엔트리 존재\n".format(groupEntry.group_number))
+            first_file_many = self.file_many
             block_number_list = range(groupEntry.group_number * self.extCarver.super_b_carver.group_descriptor_block_many, (groupEntry.group_number + 1) * self.extCarver.super_b_carver.group_descriptor_block_many)
             for block_number in block_number_list:
                 self.carving_block(block_number)
@@ -160,7 +163,7 @@ class FileCarving:
             #해당 블록 그룹의 블록을 전부 카빙했습니다. 발견된 파일들에 존재하던 엔트리의 이름을 붙입니다. 파일명 규칙: group_(그룹 번호)_(엔트리의 파일명).(확장자)
             db_entry_index = 0
             journal_entry_index = 0
-            for index in range(0,self.file_many):
+            for index in range(first_file_many,self.file_many):
                 file_name = "group_{0}_".format(groupEntry.group_number)
                 if self.file_type[index] == self.SQLite_DB and db_entry_index < len(groupEntry.least_db_entry_list):
                     if type(file_name + groupEntry.least_db_entry_list[db_entry_index].file_name_without_extension) is int:
@@ -174,6 +177,7 @@ class FileCarving:
                     journal_entry_index += 1
 
                 self.make_file(index,file_name)
+
 
 
         self.journaled_file_many = self.file_many
@@ -267,14 +271,17 @@ class FileCarving:
 
         # 추가로 시그니처 정보를 파악합니다.
         # 먼저 SQLite 버전을 검사합니다. 현재 안드로이드에 채택된 SQLite는 전부 3.0 이상 4.0 미만의 버전입니다.
-        sqlite_version = int(binascii.hexlify(check_data[96:100]),16)
-        print("SQLite Version: " + str(sqlite_version))
-        if sqlite_version > 4000000 or sqlite_version < 3000000:
-            print(str(hex(self.fileConnector.file.tell() - self.fileConnector.block_size)) + "버전에 오류가 있습니다.")
-            return False
-        # 추가 데이터를 확인합니다. 해당 데이터들은 SQLite 문서에서 확정된 값입니다.
-        if check_data[21] != 64 and check_data[22] != 32 and check_data[23] != 32:
-            print(str(hex(self.fileConnector.file.tell() - self.fileConnector.block_size)) + "Signature가 다릅니다..")
+        try:
+            sqlite_version = int(binascii.hexlify(check_data[96:100]),16)
+            print("SQLite Version: " + str(sqlite_version))
+            if sqlite_version > 4000000 or sqlite_version < 3000000:
+                print(str(hex(self.fileConnector.file.tell() - self.fileConnector.block_size)) + "버전에 오류가 있습니다.")
+                return False
+            # 추가 데이터를 확인합니다. 해당 데이터들은 SQLite 문서에서 확정된 값입니다.
+            if check_data[21] != 64 and check_data[22] != 32 and check_data[23] != 32:
+                print(str(hex(self.fileConnector.file.tell() - self.fileConnector.block_size)) + "Signature가 다릅니다..")
+                return False
+        except ValueError:
             return False
 
         #SQLite 3.7.0 버전 이상부터 db 파일 크기가 저장됩니다. 정확히는 db 파일을 이루는 페이지개수가 저장되며, 이를 토대로 파일을 카빙하는 것도 가능합니다.

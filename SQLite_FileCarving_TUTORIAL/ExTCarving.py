@@ -439,12 +439,13 @@ class SuperBlockCarver:
         ext_super_block.group_descriptor_block_many = int.from_bytes(content[offset + 0x20:offset + 0x24], 'little')
         ext_super_block.group_descriptor_inode_many = int.from_bytes(content[offset + 0x28:offset + 0x2C], 'little')
         ext_super_block.group_descriptor_length = int.from_bytes(content[offset + 0xFE:offset + 0x100], 'little')
+        ext_super_block.inode_structure_size = int.from_bytes(content[offset + 0x58:offset + 0x5A], 'little')
         #통상적으로, 안드로이드에서 내부메모리의 파일시스템의 설정을 바꾸는 경우는 거의 없습니다. 이를 감안해서 첫번째 수퍼블록에서 얻은 설정값을 기본 설정값이라 가정합니다.
         self.group_descriptor_many = ext_super_block.group_descriptor_many
         self.group_descriptor_block_many = ext_super_block.group_descriptor_block_many
         self.group_descriptor_inode_many = ext_super_block.group_descriptor_inode_many
         self.group_descriptor_length = ext_super_block.group_descriptor_length
-        print(self.print_whole_super_block())
+        print(ext_super_block.print_superblock())
 
     # 발견한 그룹 디스크립터 내용을 파싱합니다.
     def parsing_group_descriptor(self, ext_superblock):
@@ -492,11 +493,14 @@ class ExTSuperBlock:
         self.group_descriptor_length = -1
         self.ExTGroupDescriptor_list = []
 
+        self.inode_structure_size = -1
+
     def print_superblock(self):
         return_text = ''
         return_text = return_text + 'superblock 블록 번호 : {0}\nsuperblock 오프셋 : {1}\n'.format(self.superblock_number, self.superblock_offset)
         return_text = return_text + 'group descriptor 개수? : {0}\n'.format(self.group_descriptor_many) + 'group descriptor 하나당 블록 개수? : {0}\n'.format(hex(self.group_descriptor_block_many))
         return_text = return_text + 'group descriptor 하나당 i노드 개수? : {0}\n'.format(hex(self.group_descriptor_inode_many)) + 'group descriptor 길이? : {0}\n'.format(self.group_descriptor_length)
+        return_text = return_text + 'i node 크기 : {0}\n'.format(self.inode_structure_size)
 
         return return_text
 
@@ -517,3 +521,8 @@ class ExTGroupDescriptor:
         return_text = return_text + "빈 블록 갯수: {0},\t비할당 i-node 갯수: {1},\t할당된 디렉토리 엔트리 갯수: {2}\n".format(hex(self.bg_free_blocks_count_lo), hex(self.bg_free_inodes_count_lo), self.bg_used_dirs_count_lo)
 
         return return_text
+
+
+class ExTInodeTable:
+    def __init__(self):
+        self.inode_many = -1
