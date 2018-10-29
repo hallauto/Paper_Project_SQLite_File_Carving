@@ -2,11 +2,11 @@ import FileCarving
 import FileConnector
 import ExTCarving
 
-image_file = r"K:\Kimchangyu\sda1-12.dd"
+image_file = r"K:\Kimchangyu\used\sda1-12.dd"
 print("Inputed image file. {0}".format(image_file))
-result_file = r"K:\Kimchangyu\Android\Test_2\result.txt"
+result_file = r"K:\Kimchangyu\used\carved-journal\result.txt"
 print("inputed result file {0}".format(result_file))
-directory = r"K:\Kimchangyu\Android\Test_4\carved"
+directory = r"K:\Kimchangyu\used\carved-journal"
 print("Inputed directory for output {0}".format(directory))
 block_size = 4096
 print("Inputed block size. {0}".format(block_size))
@@ -19,9 +19,9 @@ else:
 result_fileConnector = FileConnector.FileConnector(result_file)
 fileConnector.file_open(image_file)
 fileCarver = FileCarving.FileCarving(directory,fileConnector, result_fileConnector)
-#fileCarver.ExT_Parsing()
-#fileCarver.check_journaled_block()
-#fileCarver.carving_journaled_block()
+fileCarver.ExT_Parsing()
+fileCarver.check_journaled_block()
+fileCarver.carving_journaled_block()
 #fileCarver.carving_rest_file()
-fileCarver.carving_whole_file()
+#fileCarver.carving_whole_file()
 fileCarver.report_end()

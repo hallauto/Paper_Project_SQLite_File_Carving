@@ -339,12 +339,8 @@ class ExTJournalLog:
 class ExTDirectoryEntry:
     def __init__(self, i_node_number, entry_length, file_name_length, file_name, entry_content):
         self.file_name = file_name
-        self.file_name_without_extension = self.file_name.partition(b'.')[0]
-        self.file_name_without_extension = str(self.file_name_without_extension)
-        self.file_name_without_extension = self.file_name_without_extension[2:]
-        self.file_extension = self.file_name.partition(b'.')[-1]
-        self.file_extension = str(self.file_extension)
-        self.file_extension = self.file_extension[2:]
+        self.file_name_without_extension = self.file_name.partition(b'.')[0].decode("utf-8")
+        self.file_extension = self.file_name.partition(b'.')[-1].decode("utf-8")
         self.file_name_length = file_name_length
         self.i_node_number = i_node_number
         self.entry_length = entry_length

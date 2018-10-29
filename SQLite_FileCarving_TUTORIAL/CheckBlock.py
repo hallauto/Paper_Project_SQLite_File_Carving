@@ -101,6 +101,9 @@ class CheckBlock:
         for db_entry in self.db_entry_list:
             self.group_db_many_list[math.floor(db_entry.i_node_number / self.ext_carver.super_b_carver.group_descriptor_inode_many)] += 1
         for journal_entry in self.journal_entry_list:
+            if math.floor(journal_entry.i_node_number / self.ext_carver.super_b_carver.group_descriptor_inode_many) > len(self.group_journal_many_list):
+                self.journal_entry_list.remove(journal_entry)
+                continue
             self.group_journal_many_list[math.floor(journal_entry.i_node_number / self.ext_carver.super_b_carver.group_descriptor_inode_many)] += 1
 
     def make_group_entry_list(self):
