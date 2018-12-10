@@ -1,12 +1,14 @@
 import FileCarving
 import FileConnector
-import ExTCarving
+import time
 
-image_file = r"K:\Kimchangyu\used\sda1-12.dd"
+journaled = True
+report_on = True
+
+start_time = time.time()
+image_file = r"G:\Kimchangyu\Test4\30GB\sda1-30.dd"
 print("Inputed image file. {0}".format(image_file))
-result_file = r"K:\Kimchangyu\used\carved-journal\result.txt"
-print("inputed result file {0}".format(result_file))
-directory = r"K:\Kimchangyu\used\carved-journal"
+directory = r"G:\Kimchangyu\Test4\30GB\carved-journal"
 print("Inputed directory for output {0}".format(directory))
 block_size = 4096
 print("Inputed block size. {0}".format(block_size))
@@ -16,12 +18,20 @@ if block_size is "":
 else:
     fileConnector = FileConnector.FileConnector(image_file,int(block_size))
 
-result_fileConnector = FileConnector.FileConnector(result_file)
 fileConnector.file_open(image_file)
-fileCarver = FileCarving.FileCarving(directory,fileConnector, result_fileConnector)
-fileCarver.ExT_Parsing()
-fileCarver.check_journaled_block()
-fileCarver.carving_journaled_block()
-#fileCarver.carving_rest_file()
-#fileCarver.carving_whole_file()
-fileCarver.report_end()
+fileCarver = FileCarving.FileCarving(directory,fileConnector,start_time)
+
+if report_on is True:
+    fileCarver.report_on()
+
+if journaled is True:
+    fileCarver.ExT_Parsing()
+    fileCarver.check_journaled_block()
+    fileCarver.carving_journaled_block()
+else:
+    fileCarver.carving_whole_file()
+
+if report_on is True:
+    fileCarver.report_end()
+print("start_time ", start_time, time.time())
+print("--- %s seconds ---" %(time.time() - start_time))

@@ -2,6 +2,7 @@ import re
 import math
 import string
 from FileConnector import FileConnector
+from FileConnector import ReportFile
 from enum import IntEnum
 
 class JournalTypeEnum(IntEnum):
@@ -16,10 +17,11 @@ class EXTCarving:
     EXT_SUPER_B_HEADER = b'\x53\xEF\x01\x00'
     EXT_SUPER_B_HEADER_OFFSET = 56
 
-    def __init__(self, file_connector : FileConnector=None):
+    def __init__(self, file_connector: FileConnector, report_file: ReportFile):
         self.file_connector = file_connector
-        self.journal_carver = ExTJournalCarving(file_connector)
-        self.super_b_carver = SuperBlockCarver(file_connector)
+        self.report_file = report_file
+        self.journal_carver = ExTJournalCarving(file_connector, report_file)
+        self.super_b_carver = SuperBlockCarver(file_connector, report_file)
 
         self.ExTSuperBlock_list = []
         self.superblock_many = 0
@@ -42,9 +44,9 @@ class ExTJournalCarving:
     EXT_J_CB_FLAG = 2
     EXT_J_RB_FLAG = 5
 
-
-    def __init__(self, file_connector : FileConnector=None):
+    def __init__(self, file_connector: FileConnector, report_file: ReportFile):
         self.file_connector = file_connector
+        self.report_file = report_file
         self.journal_superblock_offset = -1
         self.journal_block_length = -1
         self.journal_block_many = -1
@@ -102,10 +104,11 @@ class ExTJournalCarving:
                 rblock = self.file_connector.file.read(self.file_connector.block_size)
                 continue
             print(str(hex(self.file_connector.file.tell() - self.file_connector.block_size)) + " 헤더 오프셋 {0}이 있습니다. 즉, 이 블록에 EXT4 저널 슈퍼 블록이 존재합니다.".format(header_offset))
+            self.report_file.report_write(str(hex(self.file_connector.file.tell() - self.file_connector.block_size)) + " 헤더 오프셋 {0}이 있습니다. 즉, 이 블록에 EXT4 저널 슈퍼 블록이 존재합니다.\n".format(header_offset))
             self.journal_superblock_offset = self.file_connector.file.tell() - self.file_connector.block_size
             self.journal_superblock_number = math.ceil(self.journal_superblock_offset / self.file_connector.block_size)
             self.journal_superblock_content = rblock
-            self.fwrite_journal_superblock()
+            #self.fwrite_journal_superblock()
             break
 
         self.file_connector.load_original_seek()
@@ -275,7 +278,9 @@ class ExTJournalCarving:
         self.journal_block_start_offset = self.file_connector.block_size * self.journal_block_start_number
 
         print('journal 블록 크기: {0}'.format(self.journal_block_length))
+        self.report_file.report_write('journal 블록 크기: {0}\n'.format(self.journal_block_length))
         print('journal 전체 갯수: {0}({1})'.format(self.journal_block_many,hex(self.journal_block_many)))
+        self.report_file.report_write('journal 전체 갯수: {0}({1})\n'.format(self.journal_block_many,hex(self.journal_block_many)))
 
 
     def fwrite_journal_superblock(self):
@@ -360,8 +365,9 @@ class SuperBlockCarver:
     EXT_SUPER_B_HEADER = b'\x53\xEF\x01\x00'
     EXT_SUPER_B_HEADER_OFFSET = 56
 
-    def __init__(self, file_connector : FileConnector=None):
+    def __init__(self, file_connector: FileConnector, report_file: ReportFile):
         self.file_connector = file_connector
+        self.report_file = report_file
 
         self.ExTSuperBlock_list = []
         self.superblock_many = 0
@@ -389,6 +395,9 @@ class SuperBlockCarver:
             tmp_ExtSuperBlock.superblock_offset = self.file_connector.file.tell() - self.file_connector.block_size + header_offset - self.EXT_SUPER_B_HEADER_OFFSET
             print(str(hex(
                 self.file_connector.file.tell() - self.file_connector.block_size)) + " 헤더 오프셋 {0}({1})이 있습니다. 즉, 이 블록에 EXT4 슈퍼 블록이 존재합니다.".format(
+                tmp_ExtSuperBlock.superblock_offset, hex(tmp_ExtSuperBlock.superblock_offset)))
+            self.report_file.report_write(str(hex(
+                self.file_connector.file.tell() - self.file_connector.block_size)) + " 헤더 오프셋 {0}({1})이 있습니다. 즉, 이 블록에 EXT4 슈퍼 블록이 존재합니다.\n".format(
                 tmp_ExtSuperBlock.superblock_offset, hex(tmp_ExtSuperBlock.superblock_offset)))
             tmp_ExtSuperBlock.superblock_number = math.floor(
                 tmp_ExtSuperBlock.superblock_offset / self.file_connector.block_size)
@@ -442,6 +451,7 @@ class SuperBlockCarver:
         self.group_descriptor_inode_many = ext_super_block.group_descriptor_inode_many
         self.group_descriptor_length = ext_super_block.group_descriptor_length
         print(ext_super_block.print_superblock())
+        self.report_file.report_write(ext_super_block.print_superblock() + '\n')
 
     # 발견한 그룹 디스크립터 내용을 파싱합니다.
     def parsing_group_descriptor(self, ext_superblock):

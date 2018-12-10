@@ -117,4 +117,20 @@ class FileConnector:
             print("There isn't block number {0}")
             return ''
 
+#레포트 전용 저장 파일에 레포트를 저장하고 관리하는 클래스입니다.
+class ReportFile:
+    def __init__(self):
+        self.report_flag = False
+        self.report_file = 0
 
+    def report_on(self, file_directory):
+        self.report_flag = True
+        self.report_file = open(file_directory, 'w')
+
+    def report_write(self, text):
+        if self.report_flag is True:
+            self.report_file.write(text)
+
+    def report_end(self):
+        if self.report_flag is True:
+            self.report_file.close()
